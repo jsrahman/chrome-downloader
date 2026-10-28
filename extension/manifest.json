@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Okja YouTube Saver",
+  "version": "1.0.0",
+  "description": "Send permitted YouTube videos to a private local downloader.",
+  "permissions": ["activeTab", "storage", "tabs", "notifications"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "icons": {
+    "128": "icon128.png"
+  },
+  "action": {
+    "default_title": "Okja YouTube Saver",
+    "default_popup": "popup.html",
+    "default_icon": "icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*", "https://m.youtube.com/*", "https://music.youtube.com/*"],
+      "js": ["vendor/sweetalert2.all.min.js", "share-menu.js"],
+      "css": ["vendor/sweetalert2-dark.min.css", "share-menu.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options.html"
+}

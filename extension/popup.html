@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Okja YouTube Saver</title>
+    <link rel="stylesheet" href="vendor/sweetalert2-dark.min.css">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body class="popup-page">
+    <main class="panel">
+      <!-- Header -->
+      <header class="brand-row">
+        <div class="brand-mark" aria-hidden="true">
+          <span></span>
+        </div>
+        <div>
+          <p class="eyebrow">LOCAL DOWNLOADER</p>
+          <h1>Okja Saver</h1>
+        </div>
+        <button id="settings" class="icon-button" type="button" title="Preferences & Settings" aria-label="Open settings">⚙</button>
+      </header>
+
+      <!-- Active Download Panel (Shows in popup when a file is downloading) -->
+      <section id="progressPanel" class="progress-panel hidden" aria-live="polite">
+        <div class="status-row">
+          <div style="min-width: 0;">
+            <p class="label">CURRENTLY DOWNLOADING</p>
+            <p id="statusText" class="status-text">Preparing…</p>
+          </div>
+          <span id="progressValue" class="progress-value">0%</span>
+        </div>
+        <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+        <p id="progressDetail" class="muted"></p>
+        <p id="errorText" class="error hidden"></p>
+        <div class="action-row">
+          <button id="cancel" class="secondary-button" type="button">Cancel</button>
+        </div>
+      </section>
+
+      <!-- Queue Panel (Shows in popup when items are queued) -->
+      <section id="queuePanel" class="queue-panel hidden">
+        <p id="queueTitle" class="label">DOWNLOAD QUEUE</p>
+        <div id="queueList" class="queue-list"></div>
+        <p class="muted" style="margin-top: 8px; font-size: 11px;">Queue items download automatically in sequence.</p>
+      </section>
+
+      <!-- Manual Download Section for Current Open Video -->
+      <section id="downloadForm">
+        <div class="video-card">
+          <div class="video-icon" aria-hidden="true">▶</div>
+          <div style="min-width: 0;">
+            <p class="label">CURRENT OPEN VIDEO</p>
+            <p id="videoTitle" class="video-title">Checking active tab…</p>
+            <p id="videoUrl" class="muted truncate"></p>
+          </div>
+        </div>
+
+        <fieldset class="format-fieldset">
+          <legend>Save as</legend>
+          <div class="segmented">
+            <label><input type="radio" name="kind" value="video" checked><span>Video</span></label>
+            <label><input type="radio" name="kind" value="audio"><span>MP3 audio</span></label>
+          </div>
+        </fieldset>
+
+        <label id="qualityRow" class="field-label" for="quality">
+          Quality
+          <select id="quality">
+            <option value="best">Best available</option>
+            <option value="1080">Up to 1080p</option>
+            <option value="720">Up to 720p</option>
+            <option value="480">Up to 480p</option>
+            <option value="360">Up to 360p</option>
+          </select>
+        </label>
+
+        <!-- Filename Prefix Preference -->
+        <label class="field-label" for="prefixType" style="margin-top: 14px;">
+          Filename prefix
+          <select id="prefixType">
+            <option value="number">1. Number (01 - , 02 - , ...)</option>
+            <option value="roman">2. Roman number (I - , II - , ...)</option>
+            <option value="alphabet">3. Alphabet (A - , B - , ...)</option>
+            <option value="custom">4. Custom prefix</option>
+            <option value="none">None</option>
+          </select>
+        </label>
+
+        <!-- Custom Prefix Input -->
+        <label id="customPrefixRow" class="field-label hidden" for="customPrefix" style="margin-top: 10px;">
+          Custom prefix pattern
+          <input id="customPrefix" type="text" placeholder="e.g. Part {index} - or Ep {num} -">
+        </label>
+
+        <!-- Download Folder Input -->
+        <label class="field-label" for="downloadFolder" style="margin-top: 14px;">
+          Download folder (optional)
+          <input id="downloadFolder" type="text" placeholder="Default: downloads root (or playlist folder)">
+        </label>
+
+        <button id="download" class="primary-button" type="button" style="margin-top: 18px;" disabled>Start download</button>
+      </section>
+
+      <p id="message" class="message hidden" role="alert"></p>
+    </main>
+    <script src="vendor/sweetalert2.all.min.js"></script>
+    <script src="shared.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

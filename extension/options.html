@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Okja Saver settings</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body class="options-page">
+    <main class="settings-card">
+      <div class="brand-row">
+        <div class="brand-mark" aria-hidden="true"><span></span></div>
+        <div>
+          <p class="eyebrow">OKJA SAVER</p>
+          <h1>Download Preferences & Service</h1>
+        </div>
+      </div>
+      <p class="intro">
+        Choose your default 1-click download preference. When you click the download button on YouTube, it will use these settings directly without showing any popup.
+      </p>
+
+      <form id="settingsForm">
+        <!-- Default Format Preference -->
+        <fieldset class="format-fieldset" style="margin-top: 10px;">
+          <legend>Default format</legend>
+          <div class="segmented">
+            <label><input type="radio" name="defaultKind" value="video" checked><span>Video</span></label>
+            <label><input type="radio" name="defaultKind" value="audio"><span>MP3 audio</span></label>
+          </div>
+        </fieldset>
+
+        <!-- Default Quality Preference -->
+        <label id="qualityRow" class="field-label" for="defaultQuality">
+          Default video quality
+          <select id="defaultQuality">
+            <option value="best">Best available (4K / 2K)</option>
+            <option value="1080">1080p Full HD</option>
+            <option value="720">720p HD</option>
+            <option value="480">480p SD</option>
+            <option value="360">360p Compact</option>
+          </select>
+        </label>
+
+        <!-- Filename Prefix Preference -->
+        <label class="field-label" for="prefixType" style="margin-top: 16px;">
+          Filename prefix (Playlist & Series)
+          <select id="prefixType">
+            <option value="number">1. Number (01 - , 02 - , ...)</option>
+            <option value="roman">2. Roman number (I - , II - , IV - , ...)</option>
+            <option value="alphabet">3. Alphabet (A - , B - , AA - , ...)</option>
+            <option value="custom">4. Custom prefix pattern</option>
+            <option value="none">None (No prefix)</option>
+          </select>
+        </label>
+
+        <!-- Custom Prefix Input (Shows when Custom is chosen) -->
+        <label id="customPrefixRow" class="field-label hidden" for="customPrefix" style="margin-top: 10px;">
+          Custom prefix pattern
+          <input id="customPrefix" type="text" placeholder="e.g. Part {index} - or Video_{num}_">
+          <span class="muted" style="display: block; margin-top: 4px; font-weight: normal;">Use {index} for 1, 2... or {num} for 01, 02...</span>
+        </label>
+
+        <!-- Download Folder Preference -->
+        <label class="field-label" for="downloadFolder" style="margin-top: 16px;">
+          Download folder (optional)
+          <input id="downloadFolder" type="text" placeholder="e.g. Courses or Music Videos">
+          <span class="muted" style="display: block; margin-top: 4px; font-weight: normal;">Playlists automatically save inside their own folder if left blank.</span>
+        </label>
+
+        <!-- Service Port -->
+        <label class="field-label" for="port" style="margin-top: 16px;">
+          Local service port
+          <input id="port" type="number" min="1024" max="65535" required>
+        </label>
+
+        <div class="button-row" style="margin-top: 20px;">
+          <button class="primary-button" type="submit">Save preferences</button>
+          <button id="test" class="secondary-button" type="button">Test connection</button>
+        </div>
+      </form>
+
+      <p id="result" class="connection-result" aria-live="polite"></p>
+
+      <aside class="privacy-note">
+        <strong>Local by design</strong>
+        <p>Downloads are processed entirely on your machine via <code>127.0.0.1</code> into your configured download folder. No third-party servers.</p>
+      </aside>
+    </main>
+    <script src="shared.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>
