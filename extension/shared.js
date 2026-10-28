@@ -5,6 +5,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   prefixType: "number",     // "number" | "roman" | "alphabet" | "custom" | "none"
   customPrefix: "",
   downloadFolder: "",
+  channels: 8,              // Multi-channel concurrent connections (1, 4, 8, 16)
 });
 
 async function getSettings() {

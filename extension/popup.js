@@ -210,6 +210,7 @@ async function startDownload() {
   showMessage("");
   elements.download.disabled = true;
   try {
+    const settings = await OkjaApi.getSettings();
     const res = await OkjaApi.apiRequest("/api/downloads", {
       method: "POST",
       body: JSON.stringify({
@@ -220,6 +221,7 @@ async function startDownload() {
         prefixType: elements.prefixType ? elements.prefixType.value : "number",
         customPrefix: elements.customPrefix ? elements.customPrefix.value.trim() : "",
         folder: elements.downloadFolder ? elements.downloadFolder.value.trim() : "",
+        channels: settings.channels || 8,
       }),
     });
 

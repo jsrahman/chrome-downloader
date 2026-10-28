@@ -204,6 +204,13 @@ def validate_download_request(payload: object) -> dict[str, Any]:
     custom_prefix = str(payload.get("customPrefix") or payload.get("custom_prefix") or "").strip()[:100]
     folder = str(payload.get("folder") or payload.get("subfolder") or "").strip()[:200]
 
+    try:
+        channels = int(payload.get("channels", 8))
+        if channels not in {1, 2, 4, 8, 16, 32}:
+            channels = 8
+    except (TypeError, ValueError):
+        channels = 8
+
     return {
         "url": url,
         "kind": kind,
@@ -213,6 +220,7 @@ def validate_download_request(payload: object) -> dict[str, Any]:
         "prefix_type": prefix_type,
         "custom_prefix": custom_prefix,
         "folder": folder,
+        "channels": channels,
     }
 
 
@@ -227,6 +235,7 @@ class Job:
     is_playlist: bool = False
     subfolder: str = ""
     file_prefix: str = ""
+    channels: int = 8
     progress: float = 0.0
     speed: str = ""
     eta: str = ""
@@ -246,6 +255,7 @@ class Job:
             "is_playlist": self.is_playlist,
             "subfolder": self.subfolder,
             "file_prefix": self.file_prefix,
+            "channels": self.channels,
             "progress": self.progress,
             "speed": self.speed,
             "eta": self.eta,
@@ -279,6 +289,7 @@ class JobManager:
         if not file_prefix and prefix_type and prefix_type != "none":
             file_prefix = format_prefix(prefix_type, 1, request.get("custom_prefix", ""))
 
+        channels = int(request.get("channels", 8))
         job = Job(
             id=uuid.uuid4().hex,
             url=request["url"],
@@ -288,6 +299,7 @@ class JobManager:
             is_playlist=bool(request.get("is_playlist", False)),
             subfolder=subfolder,
             file_prefix=file_prefix,
+            channels=channels,
         )
         with self._lock:
             self._jobs[job.id] = job
@@ -310,6 +322,7 @@ class JobManager:
         folder_name = custom_folder or sanitize_folder_name(playlist_title if playlist_title != "Playlist" else (req_title or "Playlist"))
         prefix_type = request.get("prefix_type", "number")
         custom_prefix = request.get("custom_prefix", "")
+        channels = int(request.get("channels", 8))
 
         jobs: list[Job] = []
         with self._lock:
@@ -324,6 +337,7 @@ class JobManager:
                     is_playlist=False,
                     subfolder=folder_name,
                     file_prefix=prefix,
+                    channels=channels,
                 )
                 self._jobs[job.id] = job
                 jobs.append(job)
@@ -403,6 +417,11 @@ class JobManager:
 
         command.extend([
             "--no-warnings",
+            "--concurrent-fragments", str(job.channels or 8),
+            "--buffer-size", "16M",
+            "--http-chunk-size", "10M",
+            "--fragment-retries", "10",
+            "--retries", "10",
             "--progress-template",
             "download:OKJA_PROGRESS:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s",
             "--progress-template",

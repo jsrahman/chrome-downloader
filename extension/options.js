@@ -6,6 +6,7 @@ const prefixTypeSelect = document.querySelector("#prefixType");
 const customPrefixRow = document.querySelector("#customPrefixRow");
 const customPrefixInput = document.querySelector("#customPrefix");
 const downloadFolderInput = document.querySelector("#downloadFolder");
+const channelsSelect = document.querySelector("#channels");
 const result = document.querySelector("#result");
 
 function setResult(text, isError = false) {
@@ -50,6 +51,7 @@ async function save() {
   const prefixType = prefixTypeSelect ? prefixTypeSelect.value : "number";
   const customPrefix = customPrefixInput ? customPrefixInput.value.trim() : "";
   const downloadFolder = downloadFolderInput ? downloadFolderInput.value.trim() : "";
+  const channels = channelsSelect ? Number(channelsSelect.value) || 8 : 8;
 
   await chrome.storage.local.set({
     port,
@@ -58,6 +60,7 @@ async function save() {
     prefixType,
     customPrefix,
     downloadFolder,
+    channels,
   });
 }
 
@@ -85,12 +88,13 @@ document.querySelector("#test").addEventListener("click", async () => {
   }
 });
 
-OkjaApi.getSettings().then(({ port, defaultKind, defaultQuality, prefixType, customPrefix, downloadFolder }) => {
+OkjaApi.getSettings().then(({ port, defaultKind, defaultQuality, prefixType, customPrefix, downloadFolder, channels }) => {
   portInput.value = port;
   if (defaultQualitySelect) defaultQualitySelect.value = defaultQuality || "1080";
   if (prefixTypeSelect) prefixTypeSelect.value = prefixType || "number";
   if (customPrefixInput) customPrefixInput.value = customPrefix || "";
   if (downloadFolderInput) downloadFolderInput.value = downloadFolder || "";
+  if (channelsSelect) channelsSelect.value = String(channels || 8);
   const kindInput = document.querySelector(`input[name="defaultKind"][value="${defaultKind || "video"}"]`);
   if (kindInput) kindInput.checked = true;
   updateQualityRowVisibility();

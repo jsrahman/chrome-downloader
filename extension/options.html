@@ -67,6 +67,18 @@
           <span class="muted" style="display: block; margin-top: 4px; font-weight: normal;">Playlists automatically save inside their own folder if left blank.</span>
         </label>
 
+        <!-- Download Speed Acceleration (Multi-channel) -->
+        <label class="field-label" for="channels" style="margin-top: 16px;">
+          Download acceleration (Multi-channel)
+          <select id="channels">
+            <option value="16">16 Channels (Maximum speed — Ultra broadband)</option>
+            <option value="8" selected>8 Channels (Fast — Recommended)</option>
+            <option value="4">4 Channels (Balanced)</option>
+            <option value="1">1 Channel (Standard single connection)</option>
+          </select>
+          <span class="muted" style="display: block; margin-top: 4px; font-weight: normal;">Downloads video & audio fragments across multiple parallel channels simultaneously.</span>
+        </label>
+
         <!-- Service Port -->
         <label class="field-label" for="port" style="margin-top: 16px;">
           Local service port

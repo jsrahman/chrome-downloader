@@ -107,6 +107,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         prefixType: message.prefixType || "number",
         customPrefix: message.customPrefix || "",
         folder: message.folder || "",
+        channels: Number(message.channels) || 8,
       }),
     })
       .then((data) => {

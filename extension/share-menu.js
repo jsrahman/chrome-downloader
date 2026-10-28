@@ -165,6 +165,7 @@
         prefixType: "number",
         customPrefix: "",
         downloadFolder: "",
+        channels: 8,
       });
 
       const targetUrl = url || window.location.href;
@@ -179,6 +180,7 @@
         prefixType: settings.prefixType || "number",
         customPrefix: settings.customPrefix || "",
         folder: settings.downloadFolder || "",
+        channels: settings.channels || 8,
       }, (res) => {
         if (triggerBtn) {
           triggerBtn.style.opacity = "";
@@ -217,6 +219,7 @@
         prefixType: "number",
         customPrefix: "",
         downloadFolder: "",
+        channels: 8,
       });
 
       const targetUrl = url || window.location.href;
@@ -231,6 +234,7 @@
         prefixType: settings.prefixType || "number",
         customPrefix: settings.customPrefix || "",
         folder: settings.downloadFolder || "",
+        channels: settings.channels || 8,
       }, (res) => {
         if (chrome.runtime.lastError || !res?.ok) {
           const err = res?.error || chrome.runtime.lastError?.message || "Local service unavailable.";
@@ -381,6 +385,7 @@
         prefixType: "number",
         customPrefix: "",
         downloadFolder: "",
+        channels: 8,
       });
 
       const targetUrl = url || window.location.href;
@@ -396,6 +401,7 @@
         prefixType: settings.prefixType || "number",
         customPrefix: settings.customPrefix || "",
         folder: settings.downloadFolder || "",
+        channels: settings.channels || 8,
       }, (res) => {
         if (triggerBtn) {
           triggerBtn.style.opacity = "";

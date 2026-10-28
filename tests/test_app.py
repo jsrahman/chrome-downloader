@@ -137,12 +137,19 @@ class CommandTests(unittest.TestCase):
             url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
             kind="video",
             quality="1080",
+            channels=16,
         )
         command = manager._command(job)
         self.assertIn("--merge-output-format", command)
         self.assertEqual(command[command.index("--merge-output-format") + 1], "mp4")
         self.assertIn("--remux-video", command)
         self.assertEqual(command[command.index("--remux-video") + 1], "mp4")
+        self.assertIn("--concurrent-fragments", command)
+        self.assertEqual(command[command.index("--concurrent-fragments") + 1], "16")
+        self.assertIn("--buffer-size", command)
+        self.assertEqual(command[command.index("--buffer-size") + 1], "16M")
+        self.assertIn("--http-chunk-size", command)
+        self.assertEqual(command[command.index("--http-chunk-size") + 1], "10M")
 
     def test_playlist_command_enables_playlist_and_ignores_errors(self):
         manager = JobManager(Path("/tmp/okja-test"), "yt-dlp")
