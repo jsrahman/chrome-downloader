@@ -18,27 +18,28 @@ on your computer; no third-party download API is used.
 
 ## Quick start
 
+### On macOS
 ```sh
-brew install python@3.15 deno ffmpeg
+brew install python@3.15 ffmpeg
 ./scripts/setup.sh
 ./scripts/install-launchagent.sh
 ```
+*(Or double-click `start-mac.sh` to run manually in foreground)*
 
-`install-launchagent.sh` installs a macOS background service that starts automatically on login, so you never need to keep a terminal open.
-
-If you prefer running in foreground manually instead:
-```sh
-./scripts/start-service.sh
+### On Windows
+In PowerShell:
+```powershell
+winget install Python.Python.3.12 Gyan.FFmpeg
 ```
+Then double-click **`setup-windows.bat`** (or `scripts\setup.bat`), followed by **`start-windows.bat`**.
 
-Then open your browser's extensions page, enable **Developer mode**, choose
-**Load unpacked**, and select the `extension` directory in this repository.
+---
 
-Open the extension, select **Settings**, and use **Test connection**. On a
-supported YouTube video page, choose a format and start the download.
-
-You can also click YouTube's **Share** button and choose **Download with Okja
-Saver**. It opens the same download screen in a new tab.
+### In Your Browser (Chrome / Brave / Edge)
+1. Open `chrome://extensions` (or `edge://extensions`).
+2. Toggle on **Developer mode** (top right).
+3. Click **Load unpacked** and select the `extension` folder in this repository.
+4. On any YouTube video, click the extension icon or the YouTube **Share** ➔ **Download with Okja Saver** button.
 
 By default files are saved to `~/Downloads/Okja YouTube Saver`. Override this:
 
