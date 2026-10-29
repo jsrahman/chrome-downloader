@@ -225,6 +225,7 @@
     if (!btn) return;
 
     const iconSpan = btn.querySelector(".okja-btn-icon-wrapper");
+    const textSpan = btn.querySelector(".okja-btn-text");
     const hasActive = Boolean(currentStatus.activeJob && ["downloading", "queued"].includes(currentStatus.activeJob.status));
 
     const targetIcon = hasActive ? "queue" : "download";
@@ -235,11 +236,21 @@
       }
     }
 
-    const titleText = hasActive
-      ? `Active: ${currentStatus.activeJob.title || "Downloading video"}. Click to add this video to queue.`
-      : "Download with Okja Saver";
-    btn.title = titleText;
-    btn.setAttribute("aria-label", titleText);
+    try {
+      chrome.storage?.local?.get({ defaultKind: "video", defaultQuality: "1080", defaultAudioQuality: "320" }, (settings) => {
+        if (!settings) return;
+        const isAudio = settings.defaultKind === "audio";
+        const qual = isAudio ? `${settings.defaultAudioQuality || "320"}k MP3` : `${settings.defaultQuality || "1080"}p`;
+        const titleText = hasActive
+          ? `Active download in progress. Click to add this video to queue (${qual}).`
+          : `Download with Okja Saver (${qual})`;
+        btn.title = titleText;
+        btn.setAttribute("aria-label", titleText);
+        if (textSpan) {
+          textSpan.textContent = hasActive ? "Queue" : (isAudio ? "Download MP3" : "Download");
+        }
+      });
+    } catch (_e) {}
   }
 
   // Unified download function: starts immediately if idle, queues if busy
@@ -253,6 +264,7 @@
       const settings = await chrome.storage.local.get({
         defaultKind: "video",
         defaultQuality: "1080",
+        defaultAudioQuality: "320",
         prefixType: "number",
         customPrefix: "",
         downloadFolder: "",
@@ -261,12 +273,16 @@
 
       const targetUrl = url || window.location.href;
       const targetTitle = (title || document.title.replace(/\s*-\s*YouTube\s*$/, "")).trim();
+      const kind = settings.defaultKind || "video";
+      const quality = kind === "audio"
+        ? (settings.defaultAudioQuality || "320")
+        : (settings.defaultQuality || "1080");
 
       chrome.runtime.sendMessage({
         type: "start-download",
         url: targetUrl,
-        kind: settings.defaultKind || "video",
-        quality: settings.defaultQuality || "1080",
+        kind,
+        quality,
         title: targetTitle,
         prefixType: settings.prefixType || "number",
         customPrefix: settings.customPrefix || "",
@@ -284,10 +300,11 @@
           return;
         }
 
+        const qualLabel = kind === "audio" ? `${quality} kbps MP3` : `${quality}p MP4`;
         if (res.queued) {
-          showAlert("queue", targetTitle ? `"${targetTitle}" added to queue.` : "Video queued. Will download in sequence.");
+          showAlert("queue", targetTitle ? `"${targetTitle}" (${qualLabel}) added to queue.` : "Video queued. Will download in sequence.");
         } else {
-          showAlert("start", targetTitle ? `Saving "${targetTitle}" with ${settings.defaultQuality || "1080"}p...` : "Download started.");
+          showAlert("start", targetTitle ? `Saving "${targetTitle}" (${qualLabel})...` : "Download started.");
         }
 
         fetchStatus();
@@ -307,6 +324,7 @@
       const settings = await chrome.storage.local.get({
         defaultKind: "video",
         defaultQuality: "1080",
+        defaultAudioQuality: "320",
         prefixType: "number",
         customPrefix: "",
         downloadFolder: "",
@@ -315,12 +333,16 @@
 
       const targetUrl = url || window.location.href;
       const targetTitle = (title || document.title.replace(/\s*-\s*YouTube\s*$/, "")).trim();
+      const kind = settings.defaultKind || "video";
+      const quality = kind === "audio"
+        ? (settings.defaultAudioQuality || "320")
+        : (settings.defaultQuality || "1080");
 
       chrome.runtime.sendMessage({
         type: "start-download",
         url: targetUrl,
-        kind: settings.defaultKind || "video",
-        quality: settings.defaultQuality || "1080",
+        kind,
+        quality,
         title: targetTitle,
         prefixType: settings.prefixType || "number",
         customPrefix: settings.customPrefix || "",
@@ -333,7 +355,8 @@
           return;
         }
 
-        showAlert("queue", targetTitle ? `"${targetTitle}" added to queue.` : "Video queued. Will download in sequence.");
+        const qualLabel = kind === "audio" ? `${quality} kbps MP3` : `${quality}p MP4`;
+        showAlert("queue", targetTitle ? `"${targetTitle}" (${qualLabel}) added to queue.` : "Video queued. Will download in sequence.");
         fetchStatus();
       });
     } catch (error) {
@@ -545,6 +568,7 @@
       const settings = await chrome.storage.local.get({
         defaultKind: "video",
         defaultQuality: "1080",
+        defaultAudioQuality: "320",
         prefixType: "number",
         customPrefix: "",
         downloadFolder: "",
@@ -553,12 +577,16 @@
 
       const targetUrl = url || window.location.href;
       const targetTitle = (title || document.title.replace(/\s*-\s*YouTube\s*$/, "")).trim();
+      const kind = settings.defaultKind || "video";
+      const quality = kind === "audio"
+        ? (settings.defaultAudioQuality || "320")
+        : (settings.defaultQuality || "1080");
 
       chrome.runtime.sendMessage({
         type: "start-download",
         url: targetUrl,
-        kind: settings.defaultKind || "video",
-        quality: settings.defaultQuality || "1080",
+        kind,
+        quality,
         title: targetTitle ? `Playlist: ${targetTitle}` : "Playlist",
         isPlaylist: true,
         prefixType: settings.prefixType || "number",
@@ -577,12 +605,13 @@
           return;
         }
 
+        const qualLabel = kind === "audio" ? `${quality} kbps MP3` : `${quality}p MP4`;
         if (res.playlistCount && res.playlistCount > 1) {
-          showAlert("start", targetTitle ? `Downloading 1st video of "${targetTitle}". ${res.playlistCount - 1} videos queued.` : `Started playlist (${res.playlistCount} videos).`);
+          showAlert("start", targetTitle ? `Downloading 1st item of "${targetTitle}" (${qualLabel}). ${res.playlistCount - 1} items queued.` : `Started playlist (${res.playlistCount} items).`);
         } else if (res.queued) {
-          showAlert("queue", targetTitle ? `Playlist "${targetTitle}" added to queue.` : "Playlist queued. Will download in sequence.");
+          showAlert("queue", targetTitle ? `Playlist "${targetTitle}" (${qualLabel}) added to queue.` : "Playlist queued. Will download in sequence.");
         } else {
-          showAlert("start", targetTitle ? `Downloading playlist "${targetTitle}" with ${settings.defaultQuality || "1080"}p...` : "Playlist download started.");
+          showAlert("start", targetTitle ? `Downloading playlist "${targetTitle}" (${qualLabel})...` : "Playlist download started.");
         }
 
         fetchStatus();

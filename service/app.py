@@ -29,10 +29,20 @@ VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{6,20}$")
 PLAYLIST_ID = re.compile(r"^(?:PL|UU|FL|RD|OLAK5uy_)[A-Za-z0-9_-]{10,60}|[A-Za-z0-9_-]{13,64}$")
 QUALITY_FORMATS = {
     "best": "bv*+ba/b",
+    "2160": "bv*[height<=2160]+ba/b[height<=2160]",
+    "1440": "bv*[height<=1440]+ba/b[height<=1440]",
     "1080": "bv*[height<=1080]+ba/b[height<=1080]",
     "720": "bv*[height<=720]+ba/b[height<=720]",
     "480": "bv*[height<=480]+ba/b[height<=480]",
     "360": "bv*[height<=360]+ba/b[height<=360]",
+}
+
+AUDIO_QUALITY_FORMATS = {
+    "best": "0",
+    "320": "320k",
+    "256": "256k",
+    "192": "192k",
+    "128": "128k",
 }
 
 
@@ -205,9 +215,13 @@ def validate_download_request(payload: object) -> dict[str, Any]:
     if kind not in {"video", "audio"}:
         raise ValueError("Format must be video or audio")
 
-    quality = payload.get("quality", "best")
-    if quality not in QUALITY_FORMATS:
-        raise ValueError("Unsupported video quality")
+    quality = str(payload.get("quality", "best"))
+    if kind == "audio":
+        if quality not in AUDIO_QUALITY_FORMATS and quality not in QUALITY_FORMATS:
+            raise ValueError(f"Unsupported audio quality: {quality}")
+    else:
+        if quality not in QUALITY_FORMATS:
+            raise ValueError(f"Unsupported video quality: {quality}")
 
     title = str(payload.get("title", "")).strip()[:300]
     raw_url = str(payload.get("url", ""))
@@ -560,10 +574,12 @@ class JobManager:
         if (venv_bin / "ffmpeg").is_file() or (venv_bin / "ffmpeg.exe").is_file():
             command.extend(["--ffmpeg-location", str(venv_bin)])
         if job.kind == "audio":
-            command.extend(["--extract-audio", "--audio-format", "mp3", "--audio-quality", "0"])
+            audio_quality_val = AUDIO_QUALITY_FORMATS.get(job.quality, "0")
+            command.extend(["--extract-audio", "--audio-format", "mp3", "--audio-quality", audio_quality_val])
         else:
+            format_spec = QUALITY_FORMATS.get(job.quality, QUALITY_FORMATS["best"])
             command.extend([
-                "--format", QUALITY_FORMATS[job.quality],
+                "--format", format_spec,
                 "--merge-output-format", "mp4",
                 "--remux-video", "mp4",
             ])

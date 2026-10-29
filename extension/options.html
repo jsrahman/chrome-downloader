@@ -22,23 +22,46 @@
       <form id="settingsForm">
         <!-- Default Format Preference -->
         <fieldset class="format-fieldset" style="margin-top: 10px;">
-          <legend>Default format</legend>
+          <legend>Default download format</legend>
           <div class="segmented">
-            <label><input type="radio" name="defaultKind" value="video" checked><span>Video</span></label>
-            <label><input type="radio" name="defaultKind" value="audio"><span>MP3 audio</span></label>
+            <label><input type="radio" name="defaultKind" value="video" checked><span>Video (MP4)</span></label>
+            <label><input type="radio" name="defaultKind" value="audio"><span>Audio (MP3)</span></label>
           </div>
+          <span class="muted" style="display: block; margin-top: 6px; font-weight: normal; font-size: 11px;">
+            1-click download buttons on YouTube will automatically download in this format.
+          </span>
         </fieldset>
 
-        <!-- Default Quality Preference -->
-        <label id="qualityRow" class="field-label" for="defaultQuality">
-          Default video quality
+        <!-- Default Video Resolution Preference -->
+        <label id="videoQualityRow" class="field-label" for="defaultQuality" style="margin-top: 14px;">
+          Default video resolution
           <select id="defaultQuality">
             <option value="best">Best available (4K / 2K)</option>
-            <option value="1080">1080p Full HD</option>
+            <option value="2160">4K Ultra HD (2160p)</option>
+            <option value="1440">2K Quad HD (1440p)</option>
+            <option value="1080" selected>1080p Full HD</option>
             <option value="720">720p HD</option>
             <option value="480">480p SD</option>
             <option value="360">360p Compact</option>
           </select>
+          <span class="muted" style="display: block; margin-top: 4px; font-weight: normal; font-size: 11px;">
+            Used when Video is selected as default format.
+          </span>
+        </label>
+
+        <!-- Default Audio Quality Preference -->
+        <label id="audioQualityRow" class="field-label hidden" for="defaultAudioQuality" style="margin-top: 14px;">
+          Default audio quality (Bitrate)
+          <select id="defaultAudioQuality">
+            <option value="320" selected>320 kbps (Best Quality MP3)</option>
+            <option value="256">256 kbps (High Quality)</option>
+            <option value="192">192 kbps (Standard)</option>
+            <option value="128">128 kbps (Compact)</option>
+            <option value="best">Best Available (VBR)</option>
+          </select>
+          <span class="muted" style="display: block; margin-top: 4px; font-weight: normal; font-size: 11px;">
+            Used when Audio is selected as default format.
+          </span>
         </label>
 
         <!-- Filename Prefix Preference -->

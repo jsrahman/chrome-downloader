@@ -2,8 +2,10 @@ const elements = {
   downloadForm: document.querySelector("#downloadForm"),
   videoTitle: document.querySelector("#videoTitle"),
   videoUrl: document.querySelector("#videoUrl"),
-  qualityRow: document.querySelector("#qualityRow"),
+  videoQualityRow: document.querySelector("#videoQualityRow"),
   quality: document.querySelector("#quality"),
+  audioQualityRow: document.querySelector("#audioQualityRow"),
+  audioQuality: document.querySelector("#audioQuality"),
   download: document.querySelector("#download"),
   progressPanel: document.querySelector("#progressPanel"),
   statusText: document.querySelector("#statusText"),
@@ -167,16 +169,31 @@ function updateCustomPrefixVisibility() {
   }
 }
 
+function updateFormatQualityVisibility() {
+  const isAudio = selectedKind() === "audio";
+  if (elements.videoQualityRow) {
+    elements.videoQualityRow.classList.toggle("hidden", isAudio);
+  }
+  if (elements.audioQualityRow) {
+    elements.audioQualityRow.classList.toggle("hidden", !isAudio);
+  }
+}
+
 async function startDownload() {
   showMessage("");
   elements.download.disabled = true;
   try {
     const settings = await OkjaApi.getSettings();
+    const kind = selectedKind();
+    const quality = kind === "audio"
+      ? (elements.audioQuality ? elements.audioQuality.value : "320")
+      : (elements.quality ? elements.quality.value : "1080");
+
     chrome.runtime.sendMessage({
       type: "start-download",
       url: currentUrl,
-      kind: selectedKind(),
-      quality: elements.quality ? elements.quality.value : "1080",
+      kind,
+      quality,
       title: elements.videoTitle.textContent,
       prefixType: elements.prefixType ? elements.prefixType.value : "number",
       customPrefix: elements.customPrefix ? elements.customPrefix.value.trim() : "",
@@ -216,11 +233,14 @@ async function initialize() {
   if (elements.quality) {
     elements.quality.value = settings.defaultQuality || "1080";
   }
+  if (elements.audioQuality) {
+    elements.audioQuality.value = settings.defaultAudioQuality || "320";
+  }
   const kindInput = document.querySelector(`input[name="kind"][value="${settings.defaultKind || "video"}"]`);
   if (kindInput) {
     kindInput.checked = true;
-    elements.qualityRow.classList.toggle("hidden", settings.defaultKind === "audio");
   }
+  updateFormatQualityVisibility();
 
   if (elements.prefixType) {
     elements.prefixType.value = settings.prefixType || "number";
@@ -259,9 +279,7 @@ elements.download.addEventListener("click", startDownload);
 elements.cancel.addEventListener("click", cancelActiveDownload);
 
 document.querySelectorAll('input[name="kind"]').forEach((input) => {
-  input.addEventListener("change", () => {
-    elements.qualityRow.classList.toggle("hidden", selectedKind() === "audio");
-  });
+  input.addEventListener("change", updateFormatQualityVisibility);
 });
 
 if (elements.prefixType) {

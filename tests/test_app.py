@@ -70,6 +70,24 @@ class RequestValidationTests(unittest.TestCase):
         self.assertEqual(result["kind"], "video")
         self.assertEqual(result["quality"], "720")
 
+    def test_accepts_video_resolutions_including_4k_and_2k(self):
+        for qual in ("best", "2160", "1440", "1080", "720", "480", "360"):
+            req = {**self.valid, "quality": qual}
+            res = validate_download_request(req)
+            self.assertEqual(res["quality"], qual)
+
+    def test_accepts_audio_bitrates(self):
+        for bitrate in ("best", "320", "256", "192", "128"):
+            req = {**self.valid, "kind": "audio", "quality": bitrate}
+            res = validate_download_request(req)
+            self.assertEqual(res["kind"], "audio")
+            self.assertEqual(res["quality"], bitrate)
+
+    def test_rejects_invalid_audio_quality(self):
+        req = {**self.valid, "kind": "audio", "quality": "9999"}
+        with self.assertRaises(ValueError):
+            validate_download_request(req)
+
     def test_rejects_unknown_format_values(self):
         for field, value in (("kind", "playlist"), ("quality", "8k; rm -rf")):
             request = {**self.valid, field: value}
@@ -131,6 +149,30 @@ class CommandTests(unittest.TestCase):
         command = manager._command(job)
         self.assertIn("--extract-audio", command)
         self.assertEqual(command[command.index("--audio-format") + 1], "mp3")
+        self.assertEqual(command[command.index("--audio-quality") + 1], "0")
+
+    def test_audio_command_respects_bitrates(self):
+        manager = JobManager(Path("/tmp/okja-test"), "yt-dlp")
+        for quality_val, expected_flag in (("320", "320k"), ("256", "256k"), ("192", "192k"), ("128", "128k")):
+            job = Job(
+                id="2",
+                url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                kind="audio",
+                quality=quality_val,
+            )
+            command = manager._command(job)
+            self.assertEqual(command[command.index("--audio-quality") + 1], expected_flag)
+
+    def test_video_command_supports_4k(self):
+        manager = JobManager(Path("/tmp/okja-test"), "yt-dlp")
+        job = Job(
+            id="1",
+            url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            kind="video",
+            quality="2160",
+        )
+        command = manager._command(job)
+        self.assertEqual(command[command.index("--format") + 1], "bv*[height<=2160]+ba/b[height<=2160]")
 
     def test_video_command_requests_mp4(self):
         manager = JobManager(Path("/tmp/okja-test"), "yt-dlp")

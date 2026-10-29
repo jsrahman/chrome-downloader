@@ -1,11 +1,12 @@
 const DEFAULT_SETTINGS = Object.freeze({
   port: 43117,
-  defaultKind: "video",     // "video" | "audio"
-  defaultQuality: "1080",   // "best" | "1080" | "720" | "480" | "360"
-  prefixType: "number",     // "number" | "roman" | "alphabet" | "custom" | "none"
+  defaultKind: "video",         // "video" | "audio"
+  defaultQuality: "1080",       // "best" | "2160" | "1440" | "1080" | "720" | "480" | "360"
+  defaultAudioQuality: "320",   // "best" | "320" | "256" | "192" | "128"
+  prefixType: "number",         // "number" | "roman" | "alphabet" | "custom" | "none"
   customPrefix: "",
   downloadFolder: "",
-  channels: 8,              // Multi-channel concurrent connections (1, 4, 8, 16)
+  channels: 8,                  // Multi-channel concurrent connections (1, 4, 8, 16)
 });
 
 async function getSettings() {

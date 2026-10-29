@@ -1,7 +1,9 @@
 const form = document.querySelector("#settingsForm");
 const portInput = document.querySelector("#port");
 const defaultQualitySelect = document.querySelector("#defaultQuality");
-const qualityRow = document.querySelector("#qualityRow");
+const defaultAudioQualitySelect = document.querySelector("#defaultAudioQuality");
+const videoQualityRow = document.querySelector("#videoQualityRow");
+const audioQualityRow = document.querySelector("#audioQualityRow");
 const prefixTypeSelect = document.querySelector("#prefixType");
 const customPrefixRow = document.querySelector("#customPrefixRow");
 const customPrefixInput = document.querySelector("#customPrefix");
@@ -21,8 +23,11 @@ function getSelectedKind() {
 
 function updateQualityRowVisibility() {
   const isAudio = getSelectedKind() === "audio";
-  if (qualityRow) {
-    qualityRow.classList.toggle("hidden", isAudio);
+  if (videoQualityRow) {
+    videoQualityRow.classList.toggle("hidden", isAudio);
+  }
+  if (audioQualityRow) {
+    audioQualityRow.classList.toggle("hidden", !isAudio);
   }
 }
 
@@ -47,7 +52,8 @@ async function save() {
   }
 
   const defaultKind = getSelectedKind();
-  const defaultQuality = defaultQualitySelect.value || "1080";
+  const defaultQuality = defaultQualitySelect ? defaultQualitySelect.value || "1080" : "1080";
+  const defaultAudioQuality = defaultAudioQualitySelect ? defaultAudioQualitySelect.value || "320" : "320";
   const prefixType = prefixTypeSelect ? prefixTypeSelect.value : "number";
   const customPrefix = customPrefixInput ? customPrefixInput.value.trim() : "";
   const downloadFolder = downloadFolderInput ? downloadFolderInput.value.trim() : "";
@@ -57,6 +63,7 @@ async function save() {
     port,
     defaultKind,
     defaultQuality,
+    defaultAudioQuality,
     prefixType,
     customPrefix,
     downloadFolder,
@@ -88,9 +95,10 @@ document.querySelector("#test").addEventListener("click", async () => {
   }
 });
 
-OkjaApi.getSettings().then(({ port, defaultKind, defaultQuality, prefixType, customPrefix, downloadFolder, channels }) => {
+OkjaApi.getSettings().then(({ port, defaultKind, defaultQuality, defaultAudioQuality, prefixType, customPrefix, downloadFolder, channels }) => {
   portInput.value = port;
   if (defaultQualitySelect) defaultQualitySelect.value = defaultQuality || "1080";
+  if (defaultAudioQualitySelect) defaultAudioQualitySelect.value = defaultAudioQuality || "320";
   if (prefixTypeSelect) prefixTypeSelect.value = prefixType || "number";
   if (customPrefixInput) customPrefixInput.value = customPrefix || "";
   if (downloadFolderInput) downloadFolderInput.value = downloadFolder || "";

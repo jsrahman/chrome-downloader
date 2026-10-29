@@ -66,14 +66,29 @@
           </div>
         </fieldset>
 
-        <label id="qualityRow" class="field-label" for="quality">
-          Quality
+        <!-- Video Resolution Selection (shown when Video is selected) -->
+        <label id="videoQualityRow" class="field-label" for="quality">
+          Video resolution
           <select id="quality">
-            <option value="best">Best available</option>
-            <option value="1080">Up to 1080p</option>
-            <option value="720">Up to 720p</option>
-            <option value="480">Up to 480p</option>
-            <option value="360">Up to 360p</option>
+            <option value="best">Best available (4K / 2K)</option>
+            <option value="2160">4K Ultra HD (2160p)</option>
+            <option value="1440">2K Quad HD (1440p)</option>
+            <option value="1080" selected>1080p Full HD</option>
+            <option value="720">720p HD</option>
+            <option value="480">480p SD</option>
+            <option value="360">360p Compact</option>
+          </select>
+        </label>
+
+        <!-- Audio Quality Selection (shown when MP3 audio is selected) -->
+        <label id="audioQualityRow" class="field-label hidden" for="audioQuality">
+          Audio quality (Bitrate)
+          <select id="audioQuality">
+            <option value="320" selected>320 kbps (Best Quality)</option>
+            <option value="256">256 kbps (High Quality)</option>
+            <option value="192">192 kbps (Standard Quality)</option>
+            <option value="128">128 kbps (Compact)</option>
+            <option value="best">Best Available (VBR)</option>
           </select>
         </label>
 
