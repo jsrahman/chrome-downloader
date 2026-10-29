@@ -64,6 +64,22 @@ select:focus, input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #
 .primary-button:disabled { cursor: not-allowed; filter: grayscale(.7); opacity: .45; }
 .primary-button.queue-mode { background: #ffab00; border-color: #ffab00; color: #172000; }
 
+@keyframes okjaBtnSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(23, 32, 0, 0.25);
+  border-top-color: var(--accent-ink);
+  border-radius: 50%;
+  animation: okjaBtnSpin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
 .secondary-button { color: var(--text); background: var(--surface-2); border: 1px solid var(--line); }
 .secondary-button:hover { background: #252c28; }
 .secondary-button.danger { color: var(--error); border-color: #63352f; background: #201311; }

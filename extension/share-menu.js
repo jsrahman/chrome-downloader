@@ -27,6 +27,41 @@
       <path d="M12 2a1 1 0 00-1 1v11.586l-4.293-4.293a1 1 0 10-1.414 1.414L12 18.414l6.707-6.707a1 1 0 10-1.414-1.414L13 14.586V3a1 1 0 00-1-1Zm7 18H5a1 1 0 000 2h14a1 1 0 000-2Z" fill="currentColor"></path>
     </svg>`;
 
+  const SPINNER_ICON_SVG = `
+    <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24" focusable="false" aria-hidden="true" class="okja-spin-icon" style="pointer-events: none; display: block; width: 20px; height: 20px;">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-dasharray="32" stroke-dashoffset="12"></circle>
+    </svg>`;
+
+  function setButtonLoading(btn, isLoading, loadingText = "Loading...") {
+    if (!btn) return;
+    const iconSpan = btn.querySelector(".okja-btn-icon-wrapper, .okja-playlist-icon, .ytSpecButtonShapeNextIcon") || btn;
+    const textSpan = btn.querySelector(".okja-btn-text");
+
+    if (isLoading) {
+      btn.disabled = true;
+      btn.classList.add("okja-loading");
+      if (iconSpan && !btn.dataset.prevIcon) {
+        btn.dataset.prevIcon = iconSpan.innerHTML;
+        iconSpan.innerHTML = SPINNER_ICON_SVG;
+      }
+      if (textSpan && !btn.dataset.prevText) {
+        btn.dataset.prevText = textSpan.textContent;
+        textSpan.textContent = loadingText;
+      }
+    } else {
+      btn.disabled = false;
+      btn.classList.remove("okja-loading");
+      if (iconSpan && btn.dataset.prevIcon) {
+        iconSpan.innerHTML = btn.dataset.prevIcon;
+        delete btn.dataset.prevIcon;
+      }
+      if (textSpan && btn.dataset.prevText) {
+        textSpan.textContent = btn.dataset.prevText;
+        delete btn.dataset.prevText;
+      }
+    }
+  }
+
   let currentStatus = { activeJob: null, queue: [], queueCount: 0 };
   let lastIconState = "";
   let lastActiveJob = null;
@@ -256,8 +291,7 @@
   // Unified download function: starts immediately if idle, queues if busy
   async function downloadVideoWithPreferences(url, title, triggerBtn) {
     if (triggerBtn) {
-      triggerBtn.style.opacity = "0.6";
-      triggerBtn.disabled = true;
+      setButtonLoading(triggerBtn, true, "Starting...");
     }
 
     try {
@@ -290,8 +324,7 @@
         channels: settings.channels || 8,
       }, (res) => {
         if (triggerBtn) {
-          triggerBtn.style.opacity = "";
-          triggerBtn.disabled = false;
+          setButtonLoading(triggerBtn, false);
         }
 
         if (chrome.runtime.lastError || !res?.ok) {
@@ -317,8 +350,7 @@
       });
     } catch (error) {
       if (triggerBtn) {
-        triggerBtn.style.opacity = "";
-        triggerBtn.disabled = false;
+        setButtonLoading(triggerBtn, false);
       }
       showAlert("error", error.message);
     }
@@ -572,8 +604,7 @@
 
   async function downloadPlaylistWithPreferences(url, title, triggerBtn) {
     if (triggerBtn) {
-      triggerBtn.style.opacity = "0.6";
-      triggerBtn.disabled = true;
+      setButtonLoading(triggerBtn, true, "Starting...");
     }
 
     try {
@@ -607,8 +638,7 @@
         channels: settings.channels || 8,
       }, (res) => {
         if (triggerBtn) {
-          triggerBtn.style.opacity = "";
-          triggerBtn.disabled = false;
+          setButtonLoading(triggerBtn, false);
         }
 
         if (chrome.runtime.lastError || !res?.ok) {
@@ -641,8 +671,7 @@
       });
     } catch (error) {
       if (triggerBtn) {
-        triggerBtn.style.opacity = "";
-        triggerBtn.disabled = false;
+        setButtonLoading(triggerBtn, false);
       }
       showAlert("error", error.message);
     }

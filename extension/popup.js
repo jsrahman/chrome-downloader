@@ -74,6 +74,7 @@ function supportedVideoUrl(rawUrl) {
 }
 
 function updateDownloadButton(isDownloading) {
+  if (elements.download.classList.contains("loading")) return;
   elements.download.disabled = !currentUrl;
   if (isDownloading) {
     elements.download.textContent = "Add to queue";
@@ -192,6 +193,13 @@ function updateFormatQualityVisibility() {
 async function startDownload() {
   showMessage("");
   elements.download.disabled = true;
+  elements.download.classList.add("loading");
+  const isQueueMode = elements.download.classList.contains("queue-mode");
+  elements.download.innerHTML = `
+    <span class="btn-spinner" aria-hidden="true"></span>
+    <span>${isQueueMode ? "Adding to queue..." : "Starting download..."}</span>
+  `;
+
   try {
     const settings = await OkjaApi.getSettings();
     const kind = selectedKind();
@@ -210,12 +218,18 @@ async function startDownload() {
       folder: elements.downloadFolder ? elements.downloadFolder.value.trim() : "",
       channels: settings.channels || 8,
     }, (res) => {
-      elements.download.disabled = !currentUrl;
+      elements.download.classList.remove("loading");
       if (chrome.runtime.lastError || !res?.ok) {
+        elements.download.disabled = !currentUrl;
+        updateDownloadButton(Boolean(currentActiveJobId));
         showMessage(res?.error || chrome.runtime.lastError?.message || "Failed to start download.");
       } else if (res?.allSkipped) {
+        elements.download.disabled = !currentUrl;
+        updateDownloadButton(Boolean(currentActiveJobId));
         showMessage("All videos in this playlist are already downloaded or queued.");
       } else if (res?.skippedCount && res.skippedCount > 0) {
+        elements.download.disabled = !currentUrl;
+        updateDownloadButton(true);
         showMessage(`Queued ${res.playlistCount || 0} items (${res.skippedCount} already downloaded/skipped).`, true);
         pollStatus();
       } else {
@@ -223,7 +237,9 @@ async function startDownload() {
       }
     });
   } catch (error) {
+    elements.download.classList.remove("loading");
     elements.download.disabled = !currentUrl;
+    updateDownloadButton(Boolean(currentActiveJobId));
     showMessage(error.message);
   }
 }
