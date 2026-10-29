@@ -91,8 +91,13 @@ The check script validates Python syntax, JSON files, and runs unit tests.
 - **YouTube changed something** — Update `yt-dlp` with
   `python3 -m pip install --upgrade yt-dlp`.
 
+## Contributing
+
+Contributions are welcome! Please read our [**Contributing Guide (CONTRIBUTING.md)**](CONTRIBUTING.md) for details on code guidelines, local development setup, debugging, testing, and how to submit pull requests.
+
 ## Files
 
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — complete guide for contributors and development setup.
 - [`project.md`](project.md) — plan and acceptance criteria.
 - [`agent.md`](agent.md) — contributor/agent instructions.
 - [`extension/`](extension/) — browser extension.
