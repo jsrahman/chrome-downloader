@@ -480,5 +480,136 @@ class HealthDiagnosticsTests(unittest.TestCase):
                         self.assertNotIn("apt", info["install_cmd"])
 
 
+class CacheAndDeduplicationTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.manager = JobManager(Path(self.temp_dir.name), "yt-dlp")
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_cache_deduplication_allows_different_format(self):
+        # Cache video as 'video'
+        self.manager.add_to_cache("dQw4w9WgXcQ", "video", "Never Gonna Give You Up")
+        self.assertTrue(self.manager.is_cached("dQw4w9WgXcQ", "video"))
+        self.assertFalse(self.manager.is_cached("dQw4w9WgXcQ", "audio"))
+
+        # Re-requesting 'video' must raise ValueError
+        with self.assertRaises(ValueError) as ctx:
+            self.manager.create({
+                "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "kind": "video",
+                "quality": "1080",
+            })
+        self.assertIn("already downloaded", str(ctx.exception))
+
+        # Re-requesting 'audio' MUST SUCCEED (not cached yet)
+        with patch.object(self.manager, "_run"):
+            audio_job = self.manager.create({
+                "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "kind": "audio",
+                "quality": "320",
+            })
+            self.assertEqual(audio_job.kind, "audio")
+
+    def test_active_and_queue_deduplication(self):
+        with patch.object(self.manager, "_run"):
+            # Start job 1
+            job1 = self.manager.create({
+                "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "kind": "video",
+                "quality": "1080",
+            })
+            self.assertEqual(self.manager._active_job_id, job1.id)
+
+            # Attempting to queue the same video in same format must raise
+            with self.assertRaises(ValueError) as ctx:
+                self.manager.create({
+                    "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                    "kind": "video",
+                    "quality": "720",
+                })
+            self.assertIn("already downloading or in queue", str(ctx.exception))
+
+    def test_clear_queue_cancels_all_queued_jobs(self):
+        with patch.object(self.manager, "_run"):
+            j1 = self.manager.create({"url": "https://www.youtube.com/watch?v=11111111111", "kind": "video"})
+            j2 = self.manager.create({"url": "https://www.youtube.com/watch?v=22222222222", "kind": "video"})
+            j3 = self.manager.create({"url": "https://www.youtube.com/watch?v=33333333333", "kind": "video"})
+
+            self.assertEqual(len(self.manager._queue), 2)
+            cleared = self.manager.clear_queue()
+            self.assertEqual(cleared, 2)
+            self.assertEqual(len(self.manager._queue), 0)
+            self.assertEqual(j2.status, "cancelled")
+            self.assertEqual(j3.status, "cancelled")
+
+    def test_stop_all_cancels_active_and_queue(self):
+        with patch.object(self.manager, "_run"):
+            j1 = self.manager.create({"url": "https://www.youtube.com/watch?v=11111111111", "kind": "video"})
+            j2 = self.manager.create({"url": "https://www.youtube.com/watch?v=22222222222", "kind": "video"})
+
+            res = self.manager.stop_all()
+            self.assertTrue(res["stoppedActive"])
+            self.assertEqual(res["clearedQueue"], 1)
+            self.assertIsNone(self.manager._active_job_id)
+            self.assertEqual(len(self.manager._queue), 0)
+
+    def test_clear_cache_empties_saved_cache(self):
+        self.manager.add_to_cache("vid1", "video", "Test 1")
+        self.manager.add_to_cache("vid2", "audio", "Test 2")
+        self.assertEqual(len(self.manager._cache), 2)
+
+        cleared = self.manager.clear_cache()
+        self.assertEqual(cleared, 2)
+        self.assertEqual(len(self.manager._cache), 0)
+        self.assertFalse(self.manager.is_cached("vid1", "video"))
+
+    @patch("service.app.extract_playlist_items")
+    def test_playlist_skips_already_cached_videos(self, mock_extract):
+        mock_extract.return_value = (
+            "Python Course",
+            [
+                {"id": "v1", "title": "Intro", "url": "https://www.youtube.com/watch?v=11111111111"},
+                {"id": "v2", "title": "Variables", "url": "https://www.youtube.com/watch?v=22222222222"},
+                {"id": "v3", "title": "Functions", "url": "https://www.youtube.com/watch?v=33333333333"},
+            ],
+        )
+        # Pre-cache video 1
+        self.manager.add_to_cache("11111111111", "video", "Intro")
+
+        with patch.object(self.manager, "_run"):
+            jobs = self.manager.create_playlist({
+                "url": "https://www.youtube.com/playlist?list=PLBCF2DAC6FFB574DE",
+                "kind": "video",
+                "quality": "1080",
+            })
+            # Only v2 and v3 should be created
+            self.assertEqual(len(jobs), 2)
+            self.assertEqual(self.manager._last_playlist_skipped, 1)
+            self.assertEqual(jobs[0].url, "https://www.youtube.com/watch?v=22222222222")
+
+    @patch("service.app.extract_playlist_items")
+    def test_playlist_all_cached_returns_empty_and_skipped_count(self, mock_extract):
+        mock_extract.return_value = (
+            "Python Course",
+            [
+                {"id": "v1", "title": "Intro", "url": "https://www.youtube.com/watch?v=11111111111"},
+                {"id": "v2", "title": "Variables", "url": "https://www.youtube.com/watch?v=22222222222"},
+            ],
+        )
+        # Pre-cache both videos
+        self.manager.add_to_cache("11111111111", "video")
+        self.manager.add_to_cache("22222222222", "video")
+
+        with patch.object(self.manager, "_run"):
+            jobs = self.manager.create_playlist({
+                "url": "https://www.youtube.com/playlist?list=PLBCF2DAC6FFB574DE",
+                "kind": "video",
+            })
+            self.assertEqual(len(jobs), 0)
+            self.assertEqual(self.manager._last_playlist_skipped, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

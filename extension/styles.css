@@ -32,8 +32,9 @@ button { cursor: pointer; }
 .brand-mark { width: 40px; height: 40px; border-radius: 13px; background: var(--accent); display: grid; place-items: center; transform: rotate(-4deg); flex-shrink: 0; }
 .brand-mark span { width: 0; height: 0; border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-left: 10px solid var(--accent-ink); margin-left: 2px; }
 .eyebrow, .label { margin: 0; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
-.icon-button { margin-left: auto; width: 34px; height: 34px; border-radius: 10px; color: var(--muted); background: transparent; border: 1px solid var(--line); display: grid; place-items: center; font-size: 16px; }
+.icon-button { width: 34px; height: 34px; border-radius: 10px; color: var(--muted); background: transparent; border: 1px solid var(--line); display: grid; place-items: center; font-size: 15px; flex-shrink: 0; }
 .icon-button:hover { color: var(--text); border-color: #47514b; }
+.icon-button.danger:hover { color: var(--error); border-color: var(--error); background: #291512; }
 
 .notice { display: grid; gap: 5px; padding: 14px; margin-bottom: 16px; border: 1px solid #53672f; background: #18200c; border-radius: 12px; font-size: 13px; }
 .notice span { color: #b7c2b9; }
@@ -77,6 +78,10 @@ select:focus, input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #
 
 /* Queue Panel */
 .queue-panel { margin-bottom: 18px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+.queue-header-row { display: flex; justify-content: space-between; align-items: center; }
+.queue-clear-all-btn { background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 6px; font-size: 10px; font-weight: 700; padding: 2px 7px; cursor: pointer; text-transform: uppercase; letter-spacing: .05em; transition: all .15s ease; }
+.queue-clear-all-btn:hover { color: var(--error); border-color: var(--error); background: #291512; }
+.queue-clear-all-btn:disabled { opacity: .45; cursor: not-allowed; }
 .queue-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; max-height: 120px; overflow-y: auto; }
 .queue-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .queue-idx { font-weight: 800; color: var(--accent); font-size: 11px; min-width: 18px; }

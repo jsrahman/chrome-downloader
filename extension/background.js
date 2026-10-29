@@ -282,6 +282,44 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "clear-queue") {
+    OkjaApi.apiRequest("/api/queue/clear", { method: "POST" })
+      .then((data) => {
+        checkAndUpdateStatus();
+        broadcastToTabs({ type: "queue-cleared" });
+        sendResponse({ ok: true, ...data });
+      })
+      .catch((err) => sendResponse({ ok: false, error: err.message }));
+    return true;
+  }
+
+  if (message.type === "stop-all") {
+    OkjaApi.apiRequest("/api/downloads/stop-all", { method: "POST" })
+      .then((data) => {
+        lastKnownActiveJob = null;
+        updateBadge(null);
+        if (trackerTimer) {
+          clearInterval(trackerTimer);
+          trackerTimer = null;
+        }
+        checkAndUpdateStatus();
+        broadcastToTabs({ type: "all-stopped" });
+        sendResponse({ ok: true, ...data });
+        scheduleShutdown();
+      })
+      .catch((err) => sendResponse({ ok: false, error: err.message }));
+    return true;
+  }
+
+  if (message.type === "clear-cache") {
+    OkjaApi.apiRequest("/api/cache/clear", { method: "POST" })
+      .then((data) => {
+        sendResponse({ ok: true, ...data });
+      })
+      .catch((err) => sendResponse({ ok: false, error: err.message }));
+    return true;
+  }
+
   if (message.type === "open-onboarding") {
     chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") });
     sendResponse({ ok: true });

@@ -296,7 +296,13 @@
 
         if (chrome.runtime.lastError || !res?.ok) {
           const err = res?.error || chrome.runtime.lastError?.message || "Local service unavailable.";
-          showAlert("error", err);
+          if (res?.alreadyDownloaded || err.includes("already downloaded")) {
+            showAlert("queue", `Already downloaded as ${kind === "audio" ? "MP3" : "video"}. Clear cache in Okja Saver to re-download.`);
+          } else if (res?.alreadyQueued || err.includes("already downloading or in queue")) {
+            showAlert("queue", targetTitle ? `"${targetTitle}" is already downloading or in queue.` : "Already downloading or in queue.");
+          } else {
+            showAlert("error", err);
+          }
           return;
         }
 
@@ -351,7 +357,13 @@
       }, (res) => {
         if (chrome.runtime.lastError || !res?.ok) {
           const err = res?.error || chrome.runtime.lastError?.message || "Local service unavailable.";
-          showAlert("error", err);
+          if (res?.alreadyDownloaded || err.includes("already downloaded")) {
+            showAlert("queue", `Already downloaded as ${kind === "audio" ? "MP3" : "video"}. Clear cache in Okja Saver to re-download.`);
+          } else if (res?.alreadyQueued || err.includes("already downloading or in queue")) {
+            showAlert("queue", targetTitle ? `"${targetTitle}" is already downloading or in queue.` : "Already downloading or in queue.");
+          } else {
+            showAlert("error", err);
+          }
           return;
         }
 
@@ -601,12 +613,23 @@
 
         if (chrome.runtime.lastError || !res?.ok) {
           const err = res?.error || chrome.runtime.lastError?.message || "Local service unavailable.";
-          showAlert("error", err);
+          if (res?.alreadyDownloaded || err.includes("already downloaded")) {
+            showAlert("queue", `Already downloaded as ${kind === "audio" ? "MP3" : "video"}. Clear cache in Okja Saver to re-download.`);
+          } else if (res?.alreadyQueued || err.includes("already downloading or in queue")) {
+            showAlert("queue", targetTitle ? `"${targetTitle}" is already downloading or in queue.` : "Already downloading or in queue.");
+          } else {
+            showAlert("error", err);
+          }
           return;
         }
 
         const qualLabel = kind === "audio" ? `${quality} kbps MP3` : `${quality}p MP4`;
-        if (res.playlistCount && res.playlistCount > 1) {
+        if (res.allSkipped) {
+          showAlert("queue", `All videos in "${targetTitle}" are already downloaded or queued.`);
+        } else if (res.skippedCount && res.skippedCount > 0) {
+          const queuedCount = res.playlistCount || 0;
+          showAlert("start", `Playlist "${targetTitle}": ${queuedCount} items queued (${res.skippedCount} already downloaded/skipped).`);
+        } else if (res.playlistCount && res.playlistCount > 1) {
           showAlert("start", targetTitle ? `Downloading 1st item of "${targetTitle}" (${qualLabel}). ${res.playlistCount - 1} items queued.` : `Started playlist (${res.playlistCount} items).`);
         } else if (res.queued) {
           showAlert("queue", targetTitle ? `Playlist "${targetTitle}" (${qualLabel}) added to queue.` : "Playlist queued. Will download in sequence.");

@@ -317,7 +317,124 @@ class JobManager:
         self._lock = threading.Lock()
         self._shutdown_callback: Optional[Callable[[], None]] = None
         self._idle_timer: Optional[threading.Timer] = None
+        self._cache_file = self.download_dir / ".okja_download_cache.json"
+        self._cache: dict[str, dict[str, Any]] = self._load_cache()
+        self._last_playlist_skipped: int = 0
         self._arm_idle_timer()
+
+    def _load_cache(self) -> dict[str, dict[str, Any]]:
+        if not self._cache_file.is_file():
+            return {}
+        try:
+            with open(self._cache_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            pass
+        return {}
+
+    def _save_cache(self) -> None:
+        try:
+            self.download_dir.mkdir(parents=True, exist_ok=True)
+            with open(self._cache_file, "w", encoding="utf-8") as f:
+                json.dump(self._cache, f, indent=2)
+        except Exception:
+            pass
+
+    def add_to_cache(self, video_id: str, kind: str, title: str = "", filename: str = "") -> None:
+        if not video_id or not kind:
+            return
+        key = f"{video_id}:{kind}"
+        with self._lock:
+            self._cache[key] = {
+                "videoId": video_id,
+                "kind": kind,
+                "title": title,
+                "filename": filename,
+                "timestamp": int(time.time()),
+            }
+            self._save_cache()
+
+    def is_cached(self, video_id: str, kind: str) -> bool:
+        if not video_id or not kind:
+            return False
+        key = f"{video_id}:{kind}"
+        with self._lock:
+            return key in self._cache
+
+    def is_queued_or_active(self, video_id: str, kind: str) -> bool:
+        if not video_id or not kind:
+            return False
+        with self._lock:
+            if self._active_job_id:
+                active = self._jobs.get(self._active_job_id)
+                if active and active.status in {"downloading", "queued"}:
+                    if extract_video_id(active.url) == video_id and active.kind == kind:
+                        return True
+            for q_id in self._queue:
+                q_job = self._jobs.get(q_id)
+                if q_job and q_job.status == "queued":
+                    if extract_video_id(q_job.url) == video_id and q_job.kind == kind:
+                        return True
+        return False
+
+    def clear_cache(self) -> int:
+        with self._lock:
+            count = len(self._cache)
+            self._cache.clear()
+            try:
+                if self._cache_file.is_file():
+                    self._cache_file.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return count
+
+    def clear_queue(self) -> int:
+        with self._lock:
+            count = 0
+            while self._queue:
+                job_id = self._queue.pop(0)
+                job = self._jobs.get(job_id)
+                if job:
+                    job.status = "cancelled"
+                    self._cleanup_job_files(job)
+                    count += 1
+            if self._active_job_id is None and len(self._queue) == 0:
+                self._arm_idle_timer()
+            return count
+
+    def stop_all(self) -> dict[str, Any]:
+        with self._lock:
+            stopped_active = False
+            if self._active_job_id:
+                active_job = self._jobs.get(self._active_job_id)
+                if active_job:
+                    active_job.status = "cancelled"
+                    proc = active_job.process
+                    if proc and proc.poll() is None:
+                        try:
+                            proc.terminate()
+                        except OSError:
+                            pass
+                    self._cleanup_job_files(active_job)
+                    stopped_active = True
+                self._active_job_id = None
+
+            cleared_queue_count = 0
+            while self._queue:
+                job_id = self._queue.pop(0)
+                job = self._jobs.get(job_id)
+                if job:
+                    job.status = "cancelled"
+                    self._cleanup_job_files(job)
+                    cleared_queue_count += 1
+
+            self._arm_idle_timer()
+            return {
+                "stoppedActive": stopped_active,
+                "clearedQueue": cleared_queue_count,
+            }
 
     def set_shutdown_callback(self, callback: Callable[[], None]) -> None:
         with self._lock:
@@ -351,6 +468,17 @@ class JobManager:
             self._idle_timer = None
 
     def create(self, request: dict[str, Any]) -> Job:
+        url = request["url"]
+        kind = request.get("kind", "video")
+        video_id = extract_video_id(url)
+
+        if video_id and not request.get("is_playlist"):
+            if self.is_queued_or_active(video_id, kind):
+                raise ValueError("This video is already downloading or in queue")
+            if self.is_cached(video_id, kind):
+                fmt = "MP3 audio" if kind == "audio" else "video"
+                raise ValueError(f"This video is already downloaded as {fmt}. (Use 'Clear Cache' to re-download)")
+
         subfolder = request.get("subfolder") or request.get("folder") or ""
         file_prefix = request.get("file_prefix") or ""
         prefix_type = request.get("prefix_type")
@@ -360,8 +488,8 @@ class JobManager:
         channels = int(request.get("channels", 8))
         job = Job(
             id=uuid.uuid4().hex,
-            url=request["url"],
-            kind=request.get("kind", "video"),
+            url=url,
+            kind=kind,
             quality=request.get("quality", "best"),
             title=request.get("title", ""),
             is_playlist=bool(request.get("is_playlist", False)),
@@ -384,9 +512,25 @@ class JobManager:
         with self._lock:
             self._cancel_idle_timer()
         url = request["url"]
+        kind = request.get("kind", "video")
         playlist_title, entries = extract_playlist_items(self.yt_dlp, url)
         if not entries:
+            self._last_playlist_skipped = 0
             return [self.create(request)]
+
+        # Filter out videos in the playlist that are already cached in this format or in queue
+        valid_entries = []
+        skipped_count = 0
+        for entry in entries:
+            v_id = extract_video_id(entry.get("url", ""))
+            if v_id and (self.is_cached(v_id, kind) or self.is_queued_or_active(v_id, kind)):
+                skipped_count += 1
+            else:
+                valid_entries.append(entry)
+
+        self._last_playlist_skipped = skipped_count
+        if not valid_entries:
+            return []
 
         custom_folder = sanitize_folder_name(request.get("folder", "")) if request.get("folder") else ""
         req_title = str(request.get("title", "")).removeprefix("Playlist:").strip()
@@ -397,12 +541,12 @@ class JobManager:
 
         jobs: list[Job] = []
         with self._lock:
-            for idx, entry in enumerate(entries, 1):
+            for idx, entry in enumerate(valid_entries, 1):
                 prefix = format_prefix(prefix_type, idx, custom_prefix)
                 job = Job(
                     id=uuid.uuid4().hex,
                     url=entry["url"],
-                    kind=request.get("kind", "video"),
+                    kind=kind,
                     quality=request.get("quality", "best"),
                     title=entry.get("title", ""),
                     is_playlist=False,
@@ -654,6 +798,9 @@ class JobManager:
             if return_code == 0:
                 job.progress = 100.0
                 job.status = "complete"
+                vid = extract_video_id(job.url)
+                if vid:
+                    self.add_to_cache(vid, job.kind, job.title, job.filename)
             else:
                 job.status = "error"
                 job.error = recent_lines[-1] if recent_lines else f"yt-dlp exited with code {return_code}"
@@ -771,6 +918,11 @@ class RequestHandler(BaseHTTPRequestHandler):
         if self.path == "/api/status":
             self._json(HTTPStatus.OK, self.server.manager.status_summary())
             return
+        if self.path == "/api/cache":
+            with self.server.manager._lock:
+                items = list(self.server.manager._cache.values())
+            self._json(HTTPStatus.OK, {"ok": True, "count": len(items), "items": items})
+            return
         match = re.fullmatch(r"/api/downloads/([a-f0-9]{32})", self.path)
         if match:
             job = self.server.manager.get(match.group(1))
@@ -783,6 +935,18 @@ class RequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         if not self._guard():
+            return
+        if self.path == "/api/queue/clear":
+            cleared = self.server.manager.clear_queue()
+            self._json(HTTPStatus.OK, {"ok": True, "clearedCount": cleared})
+            return
+        if self.path == "/api/downloads/stop-all":
+            res = self.server.manager.stop_all()
+            self._json(HTTPStatus.OK, {"ok": True, **res})
+            return
+        if self.path == "/api/cache/clear":
+            cleared = self.server.manager.clear_cache()
+            self._json(HTTPStatus.OK, {"ok": True, "clearedCount": cleared, "message": "Cache cleared"})
             return
         if self.path == "/api/setup":
             from service.native_host import run_setup
@@ -820,16 +984,37 @@ class RequestHandler(BaseHTTPRequestHandler):
             return
         if request.get("is_playlist"):
             jobs = self.server.manager.create_playlist(request)
+            skipped = getattr(self.server.manager, "_last_playlist_skipped", 0)
+            if not jobs and skipped > 0:
+                self._json(HTTPStatus.ACCEPTED, {
+                    "ok": True,
+                    "playlistCount": 0,
+                    "skippedCount": skipped,
+                    "allSkipped": True,
+                    "message": "All videos in this playlist are already downloaded or in queue.",
+                })
+                return
             if jobs:
                 first = jobs[0]
                 self._json(HTTPStatus.ACCEPTED, {
                     "job": first.public(),
                     "queued": first.status == "queued",
                     "playlistCount": len(jobs),
+                    "skippedCount": skipped,
                 })
                 return
-        job = self.server.manager.create(request)
-        self._json(HTTPStatus.ACCEPTED, {"job": job.public(), "queued": job.status == "queued"})
+        try:
+            job = self.server.manager.create(request)
+            self._json(HTTPStatus.ACCEPTED, {"job": job.public(), "queued": job.status == "queued"})
+        except ValueError as exc:
+            msg = str(exc)
+            is_cached = "already downloaded" in msg
+            is_queued = "already downloading" in msg
+            self._json(HTTPStatus.CONFLICT if (is_cached or is_queued) else HTTPStatus.BAD_REQUEST, {
+                "error": msg,
+                "alreadyDownloaded": is_cached,
+                "alreadyQueued": is_queued,
+            })
 
     def do_DELETE(self) -> None:
         if not self._guard():

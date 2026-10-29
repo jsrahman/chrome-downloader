@@ -17,6 +17,9 @@ const elements = {
   queuePanel: document.querySelector("#queuePanel"),
   queueTitle: document.querySelector("#queueTitle"),
   queueList: document.querySelector("#queueList"),
+  btnClearQueue: document.querySelector("#btnClearQueue"),
+  btnStopAll: document.querySelector("#btnStopAll"),
+  btnClearCache: document.querySelector("#btnClearCache"),
   message: document.querySelector("#message"),
   settings: document.querySelector("#settings"),
   prefixType: document.querySelector("#prefixType"),
@@ -102,6 +105,12 @@ function renderStatus(statusData) {
   updateDownloadButton(isDownloading);
   updateBadge(statusData);
   previousJob = activeJob;
+
+  if (elements.btnStopAll) {
+    const hasWork = isDownloading || queue.length > 0;
+    elements.btnStopAll.disabled = !hasWork;
+    elements.btnStopAll.style.opacity = hasWork ? "1" : "0.35";
+  }
 
   // Active Download Panel
   if (isDownloading) {
@@ -203,6 +212,11 @@ async function startDownload() {
       elements.download.disabled = !currentUrl;
       if (chrome.runtime.lastError || !res?.ok) {
         showMessage(res?.error || chrome.runtime.lastError?.message || "Failed to start download.");
+      } else if (res?.allSkipped) {
+        showMessage("All videos in this playlist are already downloaded or queued.");
+      } else if (res?.skippedCount && res.skippedCount > 0) {
+        showMessage(`Queued ${res.playlistCount || 0} items (${res.skippedCount} already downloaded/skipped).`, true);
+        pollStatus();
       } else {
         pollStatus();
       }
@@ -277,6 +291,44 @@ document.querySelector("#btnOpenOnboard")?.addEventListener("click", () => {
 });
 elements.download.addEventListener("click", startDownload);
 elements.cancel.addEventListener("click", cancelActiveDownload);
+
+elements.btnClearQueue?.addEventListener("click", () => {
+  if (elements.btnClearQueue) elements.btnClearQueue.disabled = true;
+  chrome.runtime.sendMessage({ type: "clear-queue" }, (res) => {
+    if (elements.btnClearQueue) elements.btnClearQueue.disabled = false;
+    if (res?.ok) {
+      showMessage(`Queue cleared (${res.clearedCount || 0} items removed).`, true);
+    } else {
+      showMessage(res?.error || "Failed to clear queue.");
+    }
+    pollStatus();
+  });
+});
+
+elements.btnStopAll?.addEventListener("click", () => {
+  if (elements.btnStopAll) elements.btnStopAll.disabled = true;
+  chrome.runtime.sendMessage({ type: "stop-all" }, (res) => {
+    if (elements.btnStopAll) elements.btnStopAll.disabled = false;
+    if (res?.ok) {
+      showMessage("All downloads and queued items stopped.", true);
+    } else {
+      showMessage(res?.error || "Failed to stop downloads.");
+    }
+    pollStatus();
+  });
+});
+
+elements.btnClearCache?.addEventListener("click", () => {
+  if (elements.btnClearCache) elements.btnClearCache.disabled = true;
+  chrome.runtime.sendMessage({ type: "clear-cache" }, (res) => {
+    if (elements.btnClearCache) elements.btnClearCache.disabled = false;
+    if (res?.ok) {
+      showMessage("Download cache cleared! Previously downloaded videos can now be re-downloaded.", true);
+    } else {
+      showMessage(res?.error || "Failed to clear cache.");
+    }
+  });
+});
 
 document.querySelectorAll('input[name="kind"]').forEach((input) => {
   input.addEventListener("change", updateFormatQualityVisibility);
