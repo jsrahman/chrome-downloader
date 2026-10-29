@@ -113,7 +113,16 @@
           <button id="test" class="secondary-button" type="button">Test connection</button>
         </div>
 
-        <div style="margin-top: 14px;">
+        <div style="margin-top: 14px; display: flex; flex-direction: column; gap: 12px;">
+          <div>
+            <button id="btnClearCache" class="secondary-button" type="button" style="width: 100%;">
+              🧹 Clear Download Cache
+            </button>
+            <span class="muted" style="display: block; margin-top: 4px; font-weight: normal; font-size: 11px;">
+              Clears the record of previously downloaded videos, allowing identical videos or playlist items to be downloaded again.
+            </span>
+          </div>
+
           <button id="btnOpenSetup" class="secondary-button" type="button" style="width: 100%;">
             🛠️ Run Setup & Package Verification Wizard
           </button>

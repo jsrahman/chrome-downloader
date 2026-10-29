@@ -112,3 +112,19 @@ OkjaApi.getSettings().then(({ port, defaultKind, defaultQuality, defaultAudioQua
 document.querySelector("#btnOpenSetup")?.addEventListener("click", () => {
   chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") });
 });
+
+const btnClearCache = document.querySelector("#btnClearCache");
+if (btnClearCache) {
+  btnClearCache.addEventListener("click", () => {
+    btnClearCache.disabled = true;
+    setResult("Clearing download cache…");
+    chrome.runtime.sendMessage({ type: "clear-cache" }, (res) => {
+      btnClearCache.disabled = false;
+      if (res?.ok) {
+        setResult("Download cache cleared! Previously downloaded videos can now be re-downloaded.");
+      } else {
+        setResult(res?.error || "Failed to clear cache.", true);
+      }
+    });
+  });
+}

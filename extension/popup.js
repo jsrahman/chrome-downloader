@@ -18,7 +18,6 @@ const elements = {
   queueTitle: document.querySelector("#queueTitle"),
   queueList: document.querySelector("#queueList"),
   btnClearQueue: document.querySelector("#btnClearQueue"),
-  btnClearCache: document.querySelector("#btnClearCache"),
   message: document.querySelector("#message"),
   settings: document.querySelector("#settings"),
   prefixType: document.querySelector("#prefixType"),
@@ -322,18 +321,6 @@ elements.settings.addEventListener("click", openOptions);
 elements.download.addEventListener("click", startDownload);
 elements.cancel.addEventListener("click", cancelActiveDownload);
 elements.btnClearQueue?.addEventListener("click", handleClearQueue);
-
-elements.btnClearCache?.addEventListener("click", () => {
-  if (elements.btnClearCache) elements.btnClearCache.disabled = true;
-  chrome.runtime.sendMessage({ type: "clear-cache" }, (res) => {
-    if (elements.btnClearCache) elements.btnClearCache.disabled = false;
-    if (res?.ok) {
-      showMessage("Download cache cleared! Previously downloaded videos can now be re-downloaded.", true);
-    } else {
-      showMessage(res?.error || "Failed to clear cache.");
-    }
-  });
-});
 
 document.querySelectorAll('input[name="kind"]').forEach((input) => {
   input.addEventListener("change", updateFormatQualityVisibility);
