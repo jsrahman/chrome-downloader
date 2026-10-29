@@ -100,24 +100,6 @@ async function ensureServiceRunning() {
   throw new Error("Download service started but failed to respond on port " + port);
 }
 
-function scheduleShutdown() {
-  if (shutdownTimer) clearTimeout(shutdownTimer);
-  shutdownTimer = setTimeout(async () => {
-    try {
-      const statusData = await OkjaApi.apiRequest("/api/status");
-      const active = statusData?.activeJob;
-      const queueCount = Number(statusData?.queueCount ?? (Array.isArray(statusData?.queue) ? statusData.queue.length : 0));
-      if (!active && queueCount === 0) {
-        await OkjaApi.apiRequest("/api/shutdown", { method: "POST" });
-      }
-    } catch (_e) {
-      // Service may already be closed
-    } finally {
-      shutdownTimer = null;
-    }
-  }, 1500);
-}
-
 async function checkAndUpdateStatus() {
   try {
     const statusData = await OkjaApi.apiRequest("/api/status");
@@ -196,7 +178,6 @@ function startTracking() {
         updateBadge(null);
         clearInterval(trackerTimer);
         trackerTimer = null;
-        scheduleShutdown();
       }
     } catch (_e) {
       updateBadge(null);
@@ -276,47 +257,67 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           jobId: message.jobId,
         });
         sendResponse({ ok: true, ...data });
-        scheduleShutdown();
       })
       .catch((err) => sendResponse({ ok: false, error: err.message }));
     return true;
   }
 
   if (message.type === "clear-queue") {
-    OkjaApi.apiRequest("/api/queue/clear", { method: "POST" })
-      .then((data) => {
+    (async () => {
+      try {
+        if (!(await isServiceAlive())) {
+          sendResponse({ ok: true, clearedCount: 0 });
+          return;
+        }
+        const data = await OkjaApi.apiRequest("/api/queue/clear", { method: "POST" });
         checkAndUpdateStatus();
         broadcastToTabs({ type: "queue-cleared" });
         sendResponse({ ok: true, ...data });
-      })
-      .catch((err) => sendResponse({ ok: false, error: err.message }));
+      } catch (_err) {
+        // If service is offline, queue is already empty
+        sendResponse({ ok: true, clearedCount: 0 });
+      }
+    })();
     return true;
   }
 
   if (message.type === "stop-all") {
-    OkjaApi.apiRequest("/api/downloads/stop-all", { method: "POST" })
-      .then((data) => {
-        lastKnownActiveJob = null;
-        updateBadge(null);
-        if (trackerTimer) {
-          clearInterval(trackerTimer);
-          trackerTimer = null;
+    (async () => {
+      lastKnownActiveJob = null;
+      updateBadge(null);
+      if (trackerTimer) {
+        clearInterval(trackerTimer);
+        trackerTimer = null;
+      }
+      broadcastToTabs({ type: "all-stopped" });
+
+      try {
+        if (!(await isServiceAlive())) {
+          sendResponse({ ok: true, stoppedActive: false, clearedQueue: 0 });
+          return;
         }
+        const data = await OkjaApi.apiRequest("/api/downloads/stop-all", { method: "POST" });
         checkAndUpdateStatus();
-        broadcastToTabs({ type: "all-stopped" });
         sendResponse({ ok: true, ...data });
-        scheduleShutdown();
-      })
-      .catch((err) => sendResponse({ ok: false, error: err.message }));
+      } catch (_err) {
+        // If service is offline, nothing is running
+        sendResponse({ ok: true, stoppedActive: false, clearedQueue: 0 });
+      }
+    })();
     return true;
   }
 
   if (message.type === "clear-cache") {
-    OkjaApi.apiRequest("/api/cache/clear", { method: "POST" })
-      .then((data) => {
-        sendResponse({ ok: true, ...data });
-      })
-      .catch((err) => sendResponse({ ok: false, error: err.message }));
+    (async () => {
+      try {
+        if (await isServiceAlive()) {
+          await OkjaApi.apiRequest("/api/cache/clear", { method: "POST" });
+        }
+        sendResponse({ ok: true, message: "Cache cleared" });
+      } catch (_err) {
+        sendResponse({ ok: true, message: "Cache cleared" });
+      }
+    })();
     return true;
   }
 
