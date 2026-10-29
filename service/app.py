@@ -181,6 +181,35 @@ def sanitize_folder_name(name: str) -> str:
     return cleaned[:150] or "Playlist"
 
 
+def is_partial_or_temp_file(path: Path | str) -> bool:
+    """Return True if path represents a broken, incomplete, or temporary download file.
+
+    Never matches completed media files (e.g. .mp4, .mp3, .m4a, .webm, .mkv).
+    """
+    p = Path(path)
+    name = p.name.lower()
+
+    # Incomplete download / state extensions
+    if name.endswith((".part", ".ytdl", ".temp", ".tmp", ".frag")):
+        return True
+
+    # Fragment / temp patterns used by yt-dlp, aria2, and ffmpeg
+    if (
+        ".part-" in name
+        or ".part." in name
+        or ".temp." in name
+        or ".tmp." in name
+        or ".frag" in name
+    ):
+        return True
+
+    # Intermediate separate stream files before ffmpeg merges them (e.g., .f137.mp4, .f248.webm, .f140.m4a)
+    if re.search(r"\.f\d+\.[a-z0-9]+$", name):
+        return True
+
+    return False
+
+
 def extract_playlist_items(yt_dlp: str, url: str) -> tuple[str, list[dict[str, str]]]:
     """Extract playlist title and individual video items without downloading."""
     try:
@@ -575,23 +604,27 @@ class JobManager:
             return self._jobs.get(job_id)
 
     def _cleanup_job_files(self, job: Job) -> None:
-        """Remove any partial or completed files on disk associated with a cancelled job."""
+        """Remove any broken or incomplete partial files on disk associated with a cancelled job.
+        Completed media files (.mp4, .mp3, etc.) are strictly preserved.
+        """
         target_dir = self.download_dir / sanitize_folder_name(job.subfolder) if job.subfolder else self.download_dir
 
-        # 1. If job has a recorded filename, delete it and common temp suffixes
+        # 1. If job has a recorded filename, clean only its partial/temp counterparts
         if job.filename:
             try:
-                p = Path(job.filename)
-                if p.is_file():
-                    p.unlink(missing_ok=True)
-                for ext in [".part", ".ytdl", ".temp", ".webm", ".mp4", ".m4a"]:
+                base_path = Path(job.filename)
+                # If base_path itself is an incomplete/partial file, remove it
+                if base_path.is_file() and is_partial_or_temp_file(base_path):
+                    base_path.unlink(missing_ok=True)
+                # Also delete known partial extensions for this filename
+                for ext in [".part", ".ytdl", ".temp", ".tmp"]:
                     part_p = Path(f"{job.filename}{ext}")
                     if part_p.is_file():
                         part_p.unlink(missing_ok=True)
             except OSError:
                 pass
 
-        # 2. Match any file containing the video ID in target_dir or download_dir
+        # 2. Match any broken/partial file containing the video ID in target_dir or download_dir
         vid = extract_video_id(job.url)
         if vid:
             patterns = [f"*[{vid}]*", f"*{vid}*"]
@@ -605,7 +638,7 @@ class JobManager:
                 for pat in patterns:
                     try:
                         for matched in d.rglob(pat):
-                            if matched.is_file():
+                            if matched.is_file() and is_partial_or_temp_file(matched):
                                 try:
                                     matched.unlink(missing_ok=True)
                                 except OSError:

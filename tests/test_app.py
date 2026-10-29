@@ -305,7 +305,31 @@ class PlaylistQueueTests(unittest.TestCase):
 
 
 class CancelCleanupTests(unittest.TestCase):
-    def test_cancel_removes_partial_and_video_files(self):
+    def test_is_partial_or_temp_file(self):
+        from service.app import is_partial_or_temp_file
+
+        # Broken, incomplete, or temporary files must return True
+        self.assertTrue(is_partial_or_temp_file("video.mp4.part"))
+        self.assertTrue(is_partial_or_temp_file("video.mp4.ytdl"))
+        self.assertTrue(is_partial_or_temp_file("video.part"))
+        self.assertTrue(is_partial_or_temp_file("video.ytdl"))
+        self.assertTrue(is_partial_or_temp_file("video.temp"))
+        self.assertTrue(is_partial_or_temp_file("video.temp.mp4"))
+        self.assertTrue(is_partial_or_temp_file("video.part-Frag1"))
+        self.assertTrue(is_partial_or_temp_file("video.f137.mp4"))
+        self.assertTrue(is_partial_or_temp_file("video.f248.webm"))
+        self.assertTrue(is_partial_or_temp_file("video.f140.m4a"))
+        self.assertTrue(is_partial_or_temp_file(Path("/path/to/download.mp4.part")))
+
+        # Completed, valid media files must return False (preserved!)
+        self.assertFalse(is_partial_or_temp_file("Never Gonna Give You Up [dQw4w9WgXcQ].mp4"))
+        self.assertFalse(is_partial_or_temp_file("Never Gonna Give You Up [dQw4w9WgXcQ].mp3"))
+        self.assertFalse(is_partial_or_temp_file("audio.m4a"))
+        self.assertFalse(is_partial_or_temp_file("clip.webm"))
+        self.assertFalse(is_partial_or_temp_file("movie.mkv"))
+        self.assertFalse(is_partial_or_temp_file(Path("/downloads/final.mp4")))
+
+    def test_cancel_removes_partial_and_preserves_completed_files(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             download_dir = Path(tmp_dir)
             manager = JobManager(download_dir, "yt-dlp")
@@ -324,27 +348,33 @@ class CancelCleanupTests(unittest.TestCase):
             part_file = download_dir / "Never Gonna Give You Up [dQw4w9WgXcQ].mp4.part"
             ytdl_file = download_dir / "Never Gonna Give You Up [dQw4w9WgXcQ].mp4.ytdl"
             temp_frag = download_dir / "Never Gonna Give You Up [dQw4w9WgXcQ].f137.mp4.part"
+            unmerged_stream = download_dir / "Never Gonna Give You Up [dQw4w9WgXcQ].f137.mp4"
             final_file = download_dir / "Never Gonna Give You Up [dQw4w9WgXcQ].mp4"
 
             part_file.write_text("partial data")
             ytdl_file.write_text("ytdl state")
             temp_frag.write_text("fragment data")
+            unmerged_stream.write_text("unmerged stream")
             final_file.write_text("completed file")
 
             self.assertTrue(part_file.exists())
             self.assertTrue(ytdl_file.exists())
             self.assertTrue(temp_frag.exists())
+            self.assertTrue(unmerged_stream.exists())
             self.assertTrue(final_file.exists())
 
             cancelled = manager.cancel(job.id)
             self.assertIsNotNone(cancelled)
             self.assertEqual(cancelled.status, "cancelled")
 
-            # All matching files must be deleted
+            # Incomplete partial / broken files must be deleted
             self.assertFalse(part_file.exists())
             self.assertFalse(ytdl_file.exists())
             self.assertFalse(temp_frag.exists())
-            self.assertFalse(final_file.exists())
+            self.assertFalse(unmerged_stream.exists())
+
+            # Completed video file MUST be kept intact
+            self.assertTrue(final_file.exists())
 
     def test_cancel_removes_files_in_playlist_subfolder_and_cleans_empty_dir(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -374,13 +404,46 @@ class CancelCleanupTests(unittest.TestCase):
             self.assertFalse(video_file.exists())
             self.assertFalse(course_dir.exists())
 
-    def test_cancel_removes_known_filename(self):
+    def test_cancel_preserves_other_completed_files_in_playlist_subfolder(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            download_dir = Path(tmp_dir)
+            manager = JobManager(download_dir, "yt-dlp")
+
+            job = Job(
+                id="test-playlist-job-2",
+                url="https://www.youtube.com/watch?v=k1b2c3d4e5f",
+                kind="video",
+                quality="720",
+                subfolder="My Course",
+                status="downloading",
+            )
+            manager._jobs[job.id] = job
+            manager._active_job_id = job.id
+
+            course_dir = download_dir / "My Course"
+            course_dir.mkdir(parents=True, exist_ok=True)
+            # One completed lesson and one partial lesson
+            completed_lesson = course_dir / "01 - Intro [abc12345678].mp4"
+            completed_lesson.write_text("full video")
+            broken_lesson = course_dir / "02 - Lesson 2 [k1b2c3d4e5f].mp4.part"
+            broken_lesson.write_text("broken video")
+
+            manager.cancel(job.id)
+
+            self.assertFalse(broken_lesson.exists())
+            # Completed lesson and folder must remain
+            self.assertTrue(completed_lesson.exists())
+            self.assertTrue(course_dir.exists())
+
+    def test_cancel_removes_known_filename_temp_and_preserves_completed(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             download_dir = Path(tmp_dir)
             manager = JobManager(download_dir, "yt-dlp")
 
             final_path = download_dir / "Custom Download.mp3"
             final_path.write_text("audio data")
+            temp_path = download_dir / "Custom Download.mp3.part"
+            temp_path.write_text("partial data")
 
             job = Job(
                 id="test-filename-job",
@@ -388,13 +451,16 @@ class CancelCleanupTests(unittest.TestCase):
                 kind="audio",
                 quality="best",
                 filename=str(final_path),
-                status="complete",
+                status="downloading",
             )
             manager._jobs[job.id] = job
 
             manager.cancel(job.id)
 
-            self.assertFalse(final_path.exists())
+            # Broken .part file deleted
+            self.assertFalse(temp_path.exists())
+            # Completed file preserved
+            self.assertTrue(final_path.exists())
 
 
 class ShutdownAndIdleTests(unittest.TestCase):
