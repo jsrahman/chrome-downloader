@@ -1,0 +1,24 @@
+{
+  "name": "okja-youtube-saver",
+  "version": "1.0.0",
+  "description": "Local-first YouTube downloader extension with on-demand companion service",
+  "main": "scripts/build.js",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "pack": "node scripts/build.js",
+    "zip": "node scripts/zip.js",
+    "dist": "node scripts/build.js",
+    "setup": "node scripts/setup.js",
+    "start": "node scripts/start.js",
+    "test": "node scripts/test.js"
+  },
+  "keywords": [
+    "youtube",
+    "downloader",
+    "yt-dlp",
+    "ffmpeg",
+    "chrome-extension"
+  ],
+  "author": "Okja Info",
+  "license": "MIT"
+}

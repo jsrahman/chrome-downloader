@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Welcome to Okja YouTube Saver - Setup</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+      .onboarding-page {
+        min-height: 100vh;
+        padding: 40px 20px;
+        background: radial-gradient(circle at 50% 20%, #172218 0%, #0b0d0c 70%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .onboarding-card {
+        width: 100%;
+        max-width: 620px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 32px;
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+      }
+      .stepper {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 24px 0 28px;
+        position: relative;
+      }
+      .stepper::before {
+        content: "";
+        position: absolute;
+        top: 14px;
+        left: 24px;
+        right: 24px;
+        height: 2px;
+        background: var(--line);
+        z-index: 1;
+      }
+      .step-item {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+      }
+      .step-circle {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: var(--surface-2);
+        border: 2px solid var(--line);
+        color: var(--muted);
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+        font-weight: 800;
+        transition: all .25s ease;
+      }
+      .step-item.active .step-circle {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--accent-ink);
+        box-shadow: 0 0 16px rgba(184, 245, 72, 0.4);
+      }
+      .step-item.completed .step-circle {
+        background: #10b981;
+        border-color: #10b981;
+        color: #fff;
+      }
+      .step-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--muted);
+      }
+      .step-item.active .step-label {
+        color: var(--text);
+      }
+      .os-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        background: #1f2722;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        font-size: 12px;
+        color: var(--accent);
+        font-weight: 700;
+        margin-bottom: 16px;
+      }
+      .features-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin: 18px 0;
+      }
+      .feature-box {
+        background: var(--surface-2);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px;
+      }
+      .feature-box strong {
+        display: block;
+        font-size: 13px;
+        margin-bottom: 4px;
+        color: var(--text);
+      }
+      .feature-box p {
+        margin: 0;
+        font-size: 11px;
+        color: var(--muted);
+        line-height: 1.4;
+      }
+      .check-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin: 20px 0;
+      }
+      .check-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        background: var(--surface-2);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        font-size: 13px;
+      }
+      .check-item.ok {
+        border-color: #2b5634;
+        background: #121f15;
+      }
+      .check-item.failed {
+        border-color: #7f2b24;
+        background: #231312;
+      }
+      .check-status-badge {
+        font-size: 11px;
+        font-weight: 800;
+        padding: 3px 8px;
+        border-radius: 6px;
+      }
+      .check-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+      .mini-reinstall-btn {
+        background: #361715;
+        border: 1px solid #7f2b24;
+        color: #fca5a5;
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 800;
+        cursor: pointer;
+        transition: all .2s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .mini-reinstall-btn:hover {
+        background: #4d1c18;
+        color: #fff;
+        border-color: #f87171;
+      }
+      .mini-reinstall-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .check-item.ok .check-status-badge {
+        background: #10b98126;
+        color: #34d399;
+      }
+      .check-item.failed .check-status-badge {
+        background: #ef444426;
+        color: #f87171;
+      }
+      .check-item.pending .check-status-badge {
+        background: #f59e0b26;
+        color: #fbbf24;
+      }
+      .error-alert-box {
+        background: #2a1310;
+        border: 1px solid #7f2b24;
+        border-radius: 14px;
+        padding: 16px;
+        margin: 18px 0;
+      }
+      .error-alert-box h3 {
+        margin: 0 0 8px;
+        color: #f87171;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .error-list {
+        margin: 0 0 12px;
+        padding-left: 20px;
+        color: #fca5a5;
+        font-size: 12px;
+        line-height: 1.6;
+      }
+      .code-snippet-box {
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 10px 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+        color: #e6edf3;
+      }
+      .code-snippet-box code {
+        overflow-x: auto;
+        white-space: nowrap;
+      }
+      .copy-btn {
+        background: #21262d;
+        border: 1px solid #363b42;
+        color: #c9d1d9;
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+      .copy-btn:hover {
+        background: #30363d;
+        color: #fff;
+      }
+      .distro-tabs-row {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin: 10px 0 12px;
+      }
+      .distro-tab {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        color: var(--muted);
+        border-radius: 6px;
+        padding: 4px 9px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all .2s ease;
+      }
+      .distro-tab:hover {
+        color: var(--text);
+        border-color: #4b5563;
+      }
+      .distro-tab.active {
+        background: #202b23;
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+      .success-box {
+        text-align: center;
+        padding: 24px 0;
+      }
+      .success-check-icon {
+        width: 68px;
+        height: 68px;
+        border-radius: 50%;
+        background: #10b981;
+        color: #0b0d0c;
+        display: grid;
+        place-items: center;
+        font-size: 34px;
+        margin: 0 auto 16px;
+        box-shadow: 0 0 30px rgba(16, 185, 129, 0.4);
+      }
+      .spinner {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        border-top-color: currentColor;
+        border-radius: 50%;
+        animation: spin .7s linear infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body class="onboarding-page">
+    <main class="onboarding-card">
+      <div class="brand-row">
+        <div class="brand-mark" aria-hidden="true"><span></span></div>
+        <div>
+          <p class="eyebrow">OKJA SAVER</p>
+          <h1>Companion Setup & Diagnostics</h1>
+        </div>
+      </div>
+
+      <!-- Stepper indicator -->
+      <nav class="stepper" aria-label="Setup progress">
+        <div id="stepDot1" class="step-item active">
+          <div class="step-circle">1</div>
+          <span class="step-label">Install Companion</span>
+        </div>
+        <div id="stepDot2" class="step-item">
+          <div class="step-circle">2</div>
+          <span class="step-label">Package Verification</span>
+        </div>
+        <div id="stepDot3" class="step-item">
+          <div class="step-circle">3</div>
+          <span class="step-label">Ready to Download</span>
+        </div>
+      </nav>
+
+      <!-- STAGE 1: INSTALL COMPANION -->
+      <section id="stageInstall">
+        <div class="os-pill" id="osBadge">
+          <span>🖥️</span>
+          <span id="osNameText">Detecting operating system…</span>
+        </div>
+
+        <p class="intro">
+          Okja YouTube Saver operates strictly on your local machine with zero remote servers.
+          Downloads are accelerated through a lightweight local Python companion that starts right before you download and shuts down automatically when finished.
+        </p>
+
+        <!-- Error Alert (populated if Stage 2 fails and sends user back) -->
+        <div id="errorAlert" class="error-alert-box hidden">
+          <h3>
+            <span>⚠️</span>
+            <span>Package Verification Failed</span>
+          </h3>
+          <p style="margin: 0 0 8px; font-size: 12px; color: #fca5a5;">
+            The following requirements are missing or not properly configured:
+          </p>
+          <ul id="errorUl" class="error-list"></ul>
+          <p style="margin: 8px 0 6px; font-size: 11px; color: #e2e8f0; font-weight: 700;">
+            Run this command in terminal to configure missing components:
+          </p>
+          <div class="code-snippet-box">
+            <code id="fixCommandCode">f=$(find ~ -name setup-linux.sh 2>/dev/null | head -1) && cd "$(dirname "$f")" && sh setup-linux.sh</code>
+            <button type="button" class="copy-btn" id="copyFixBtn">Copy</button>
+          </div>
+        </div>
+
+        <div class="features-grid">
+          <div class="feature-box">
+            <strong>⚡ On-Demand Service</strong>
+            <p>Runs only while downloading and exits completely. No battery or RAM drain.</p>
+          </div>
+          <div class="feature-box">
+            <strong>🔒 100% Local & Private</strong>
+            <p>Your video requests never touch cloud servers. Saved directly to your computer.</p>
+          </div>
+          <div class="feature-box">
+            <strong>🚀 Multi-channel Speed</strong>
+            <p>Splits video into parallel chunks for maximum connection saturation.</p>
+          </div>
+          <div class="feature-box">
+            <strong>📁 Auto-Organize</strong>
+            <p>Numbered series, clean filenames, and playlist folder categorization.</p>
+          </div>
+        </div>
+
+        <div style="margin-top: 24px; display: grid; gap: 10px;">
+          <button id="btnStartSetup" type="button" class="primary-button" style="padding: 15px; font-size: 14px;">
+            <span>⚡ 1-Click Automated Install & Verify</span>
+          </button>
+          <p class="muted" style="text-align: center; margin: 0; font-size: 11px;">
+            Installs yt-dlp & standalone ffmpeg automatically. No manual terminal typing required.
+          </p>
+          <button id="btnShowManual" type="button" class="text-button" style="text-align: center; font-size: 11px; margin-top: 4px;">
+            Looking for terminal commands? Click here
+          </button>
+        </div>
+
+        <div id="manualInstructions" class="hidden" style="margin-top: 16px; padding: 16px; background: var(--surface-2); border-radius: 12px; border: 1px solid var(--line);">
+          <div style="display: flex; justify-content: space-between; align-items: baseline;">
+            <p style="margin: 0; font-size: 12px; font-weight: 700;">Manual Terminal Setup (<span id="manualOsLabel">Linux</span>):</p>
+            <span class="muted" style="font-size: 11px;">Select distribution</span>
+          </div>
+
+          <div id="distroTabsRow" class="distro-tabs-row">
+            <button type="button" class="distro-tab" data-distro="fedora">Fedora / RHEL</button>
+            <button type="button" class="distro-tab" data-distro="ubuntu">Ubuntu / Debian / Mint</button>
+            <button type="button" class="distro-tab" data-distro="arch">Arch / Manjaro</button>
+            <button type="button" class="distro-tab" data-distro="opensuse">openSUSE</button>
+            <button type="button" class="distro-tab" data-distro="alpine">Alpine</button>
+          </div>
+
+          <div class="project-location-box" style="margin: 10px 0; background: #131a15; border: 1px solid #233526; border-radius: 8px; padding: 10px 12px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+              <span style="font-size: 11px; font-weight: 700; color: #a1a1aa;">📁 FOLDER LOCATION:</span>
+              <span id="locationDetectBadge" class="check-status-badge" style="background: rgba(184, 245, 72, 0.15); color: #b8f548; font-size: 10px;">Auto-Locate</span>
+            </div>
+            <div style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #e4e4e7; word-break: break-all;" id="projectLocationPath">
+              Auto-locates unpacked directory anywhere in your home folder
+            </div>
+          </div>
+
+          <div class="code-snippet-box">
+            <code id="manualCommandCode">f=$(find ~ -name setup-linux.sh 2>/dev/null | head -1) && cd "$(dirname "$f")" && sh setup-linux.sh</code>
+            <button type="button" class="copy-btn" id="copyManualBtn">Copy</button>
+          </div>
+          <p class="muted" style="margin: 6px 0 0; font-size: 11px;">
+            Auto-detects your unpacked folder location and runs local setup without manual path typing.
+          </p>
+        </div>
+      </section>
+
+      <!-- STAGE 2: VERIFICATION CHECK -->
+      <section id="stageVerify" class="hidden">
+        <h2 style="font-size: 17px; margin: 0 0 6px;">Verifying System Packages</h2>
+        <p class="intro" style="margin-bottom: 20px;">
+          Inspecting local Python environment, yt-dlp core, ffmpeg stream merger, and browser native messaging link…
+        </p>
+
+        <div class="check-list">
+          <div class="check-item pending" id="chkPython">
+            <div>
+              <strong>Python 3 Environment</strong>
+              <div class="muted" id="txtPython">Checking Python version…</div>
+            </div>
+            <div class="check-actions">
+              <button type="button" class="mini-reinstall-btn hidden" id="btnFixPython" data-target="python">⚡ Reinstall</button>
+              <span class="check-status-badge"><span class="spinner"></span> Checking</span>
+            </div>
+          </div>
+
+          <div class="check-item pending" id="chkNative">
+            <div>
+              <strong>Native Messaging Host</strong>
+              <div class="muted" id="txtNative">Checking com.okja.saver host registration…</div>
+            </div>
+            <div class="check-actions">
+              <button type="button" class="mini-reinstall-btn hidden" id="btnFixNative" data-target="native">⚡ Reinstall</button>
+              <span class="check-status-badge"><span class="spinner"></span> Checking</span>
+            </div>
+          </div>
+
+          <div class="check-item pending" id="chkYtDlp">
+            <div>
+              <strong>yt-dlp Core Engine</strong>
+              <div class="muted" id="txtYtDlp">Checking video extraction binary…</div>
+            </div>
+            <div class="check-actions">
+              <button type="button" class="mini-reinstall-btn hidden" id="btnFixYtDlp" data-target="yt-dlp">⚡ Reinstall</button>
+              <span class="check-status-badge"><span class="spinner"></span> Checking</span>
+            </div>
+          </div>
+
+          <div class="check-item pending" id="chkFfmpeg">
+            <div>
+              <strong>ffmpeg Media Multiplexer</strong>
+              <div class="muted" id="txtFfmpeg">Checking audio/video merging support…</div>
+            </div>
+            <div class="check-actions">
+              <button type="button" class="mini-reinstall-btn hidden" id="btnFixFfmpeg" data-target="ffmpeg">⚡ Reinstall</button>
+              <span class="check-status-badge"><span class="spinner"></span> Checking</span>
+            </div>
+          </div>
+
+          <div class="check-item pending" id="chkService">
+            <div>
+              <strong>Companion Lifecycle (On-Demand)</strong>
+              <div class="muted" id="txtService">Testing auto-start & shutdown…</div>
+            </div>
+            <div class="check-actions">
+              <button type="button" class="mini-reinstall-btn hidden" id="btnFixService" data-target="service">⚡ Start</button>
+              <span class="check-status-badge"><span class="spinner"></span> Checking</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="progress-track" style="height: 6px; margin: 16px 0;">
+          <div id="verifyProgressBar" class="progress-bar" style="width: 25%;"></div>
+        </div>
+
+        <!-- Failure & Reinstall Panel directly on Stage 2 (does NOT navigate away) -->
+        <div id="verifyFailCard" class="error-alert-box hidden" style="margin-top: 18px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <h3 style="margin: 0; font-size: 14px;">
+              <span>⚠️</span>
+              <span id="verifyFailTitle">Verification Incomplete</span>
+            </h3>
+            <span class="check-status-badge" style="background: #ef444426; color: #f87171;" id="verifyFailBadge">Needs Action</span>
+          </div>
+
+          <p style="margin: 0 0 10px; font-size: 12px; color: #fca5a5;" id="verifyFailSub">
+            Missing required packages or host registration. Click <strong>Reinstall</strong> below to configure them automatically:
+          </p>
+
+          <ul id="verifyErrorList" class="error-list"></ul>
+
+          <div style="display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap;">
+            <button id="btnStage2Reinstall" type="button" class="primary-button" style="flex: 1; min-width: 190px; padding: 12px; font-size: 13px;">
+              <span>⚡ Reinstall Missing Packages</span>
+            </button>
+            <button id="btnStage2Recheck" type="button" class="secondary-button" style="padding: 12px 18px; font-size: 13px;">
+              🔄 Re-verify
+            </button>
+          </div>
+
+          <div id="verifyTerminalCard" style="margin-top: 14px; padding-top: 12px; border-top: 1px solid #7f2b24;">
+            <p style="margin: 0 0 6px; font-size: 11px; color: #e2e8f0; font-weight: 700;">
+              Run in terminal from your unpacked folder location (<span id="verifyOsText">Linux</span>):
+            </p>
+
+            <div class="project-location-box" style="margin-bottom: 10px; background: #181515; border: 1px solid #4a2220; border-radius: 8px; padding: 10px 12px;">
+              <div style="font-size: 11px; font-weight: 700; color: #fca5a5; margin-bottom: 4px;">📁 FOLDER LOCATION:</div>
+              <div style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #fecaca; word-break: break-all;" id="verifyLocationPath">
+                Auto-locates unpacked directory anywhere in your home folder
+              </div>
+            </div>
+
+            <div class="code-snippet-box">
+              <code id="verifyTerminalCode">f=$(find ~ -name setup-linux.sh 2>/dev/null | head -1) && cd "$(dirname "$f")" && sh setup-linux.sh</code>
+              <button type="button" class="copy-btn" id="copyVerifyCodeBtn">Copy</button>
+            </div>
+            <p class="muted" style="margin: 6px 0 0; font-size: 11px;">
+              Auto-locates your unpacked directory and configures all packages.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- STAGE 3: SUCCESS / READY -->
+      <section id="stageSuccess" class="hidden">
+        <div class="success-box">
+          <div class="success-check-icon">✓</div>
+          <h2 style="font-size: 20px; margin: 0 0 8px;">All Packages Verified Successfully!</h2>
+          <p class="intro" style="max-width: 460px; margin: 0 auto 20px;">
+            Your system is fully configured. The download companion is ready to start automatically whenever you download a video or playlist.
+          </p>
+
+          <div style="background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px; text-align: left; margin: 0 auto 24px; font-size: 12px; line-height: 1.6; max-width: 440px;">
+            <div>✓ <strong>Python 3:</strong> <span id="resPythonVer">Ready</span></div>
+            <div>✓ <strong>yt-dlp:</strong> <span id="resYtDlpVer">Installed & configured</span></div>
+            <div>✓ <strong>ffmpeg:</strong> <span id="resFfmpegVer">Installed & configured</span></div>
+            <div>✓ <strong>Lifecycle:</strong> Auto-starts before download · Closes after download</div>
+          </div>
+
+          <div style="display: flex; gap: 10px; justify-content: center;">
+            <button id="btnOpenYouTube" type="button" class="primary-button" style="width: auto; padding: 12px 24px;">
+              <span>Open YouTube & Start Saving</span>
+            </button>
+            <button id="btnOpenOptions" type="button" class="secondary-button" style="padding: 12px 20px;">
+              Settings
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="shared.js"></script>
+    <script src="onboarding.js"></script>
+  </body>
+</html>

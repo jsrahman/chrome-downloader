@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$PATH"
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/sbin:/usr/sbin:$PATH"
 export PYTHONUNBUFFERED="1"
 
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -10,14 +10,14 @@ local_python="$project_dir/.venv/bin/python"
 
 # Resolve yt-dlp binary
 if [ -z "${OKJA_YT_DLP:-}" ]; then
-  if [ -x "/opt/homebrew/bin/yt-dlp" ]; then
+  if [ -x "$local_yt_dlp" ]; then
+    export OKJA_YT_DLP="$local_yt_dlp"
+  elif [ -x "/opt/homebrew/bin/yt-dlp" ]; then
     export OKJA_YT_DLP="/opt/homebrew/bin/yt-dlp"
   elif command -v yt-dlp >/dev/null 2>&1; then
     export OKJA_YT_DLP="$(command -v yt-dlp)"
-  elif [ -x "$local_yt_dlp" ]; then
-    export OKJA_YT_DLP="$local_yt_dlp"
   else
-    echo "yt-dlp not found. Run scripts/setup.sh first or install via Homebrew." >&2
+    echo "yt-dlp not found. Run ./scripts/setup.sh first or install via your package manager." >&2
     exit 1
   fi
 fi

@@ -252,6 +252,9 @@ async function initialize() {
 }
 
 elements.settings.addEventListener("click", openOptions);
+document.querySelector("#btnOpenOnboard")?.addEventListener("click", () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") });
+});
 elements.download.addEventListener("click", startDownload);
 elements.cancel.addEventListener("click", cancelActiveDownload);
 
@@ -269,4 +272,25 @@ window.addEventListener("unload", () => {
   if (pollTimer) clearInterval(pollTimer);
 });
 
-initialize().catch((error) => showMessage(error.message));
+async function startApp() {
+  try {
+    const { onboardingCompleted } = await chrome.storage.local.get("onboardingCompleted");
+    if (!onboardingCompleted) {
+      if (document.body) document.body.style.display = "none";
+      const onboardingUrl = chrome.runtime.getURL("onboarding.html");
+      const tabs = await chrome.tabs.query({ url: onboardingUrl });
+      if (tabs.length > 0) {
+        chrome.tabs.update(tabs[0].id, { active: true });
+        if (tabs[0].windowId) chrome.windows.update(tabs[0].windowId, { focused: true });
+      } else {
+        chrome.tabs.create({ url: onboardingUrl });
+      }
+      window.close();
+      return;
+    }
+  } catch (_e) {}
+
+  initialize().catch((error) => showMessage(error.message));
+}
+
+startApp();

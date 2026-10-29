@@ -100,3 +100,7 @@ OkjaApi.getSettings().then(({ port, defaultKind, defaultQuality, prefixType, cus
   updateQualityRowVisibility();
   updateCustomPrefixVisibility();
 });
+
+document.querySelector("#btnOpenSetup")?.addEventListener("click", () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") });
+});

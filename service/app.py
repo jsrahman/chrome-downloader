@@ -10,14 +10,16 @@ import re
 import shutil
 import signal
 import subprocess
+import sys
 import threading
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 
 
@@ -288,15 +290,51 @@ class JobManager:
         yt_dlp: str,
         player_client: Optional[str] = None,
         cookies_from_browser: Optional[str] = None,
+        idle_timeout: int = 0,
     ) -> None:
         self.download_dir = download_dir
         self.yt_dlp = yt_dlp
         self.player_client = player_client
         self.cookies_from_browser = cookies_from_browser
+        self.idle_timeout = idle_timeout
         self._jobs: dict[str, Job] = {}
         self._queue: list[str] = []
         self._active_job_id: Optional[str] = None
         self._lock = threading.Lock()
+        self._shutdown_callback: Optional[Callable[[], None]] = None
+        self._idle_timer: Optional[threading.Timer] = None
+        self._arm_idle_timer()
+
+    def set_shutdown_callback(self, callback: Callable[[], None]) -> None:
+        with self._lock:
+            self._shutdown_callback = callback
+
+    def _arm_idle_timer(self) -> None:
+        if self.idle_timeout <= 0:
+            return
+        self._cancel_idle_timer()
+
+        def on_timeout() -> None:
+            with self._lock:
+                if self._active_job_id is None and len(self._queue) == 0:
+                    print(
+                        f"[{datetime.now().strftime('%d/%b/%Y %H:%M:%S')}] All downloads completed. Idle timeout ({self.idle_timeout}s) reached. Shutting down service.",
+                        flush=True,
+                    )
+                    cb = self._shutdown_callback
+                else:
+                    cb = None
+            if cb:
+                cb()
+
+        self._idle_timer = threading.Timer(float(self.idle_timeout), on_timeout)
+        self._idle_timer.daemon = True
+        self._idle_timer.start()
+
+    def _cancel_idle_timer(self) -> None:
+        if self._idle_timer:
+            self._idle_timer.cancel()
+            self._idle_timer = None
 
     def create(self, request: dict[str, Any]) -> Job:
         subfolder = request.get("subfolder") or request.get("folder") or ""
@@ -318,6 +356,7 @@ class JobManager:
             channels=channels,
         )
         with self._lock:
+            self._cancel_idle_timer()
             self._jobs[job.id] = job
             if self._active_job_id is None:
                 self._active_job_id = job.id
@@ -328,6 +367,8 @@ class JobManager:
         return job
 
     def create_playlist(self, request: dict[str, Any]) -> list[Job]:
+        with self._lock:
+            self._cancel_idle_timer()
         url = request["url"]
         playlist_title, entries = extract_playlist_items(self.yt_dlp, url)
         if not entries:
@@ -428,6 +469,8 @@ class JobManager:
                 self._queue.remove(job_id)
                 job.status = "cancelled"
                 self._cleanup_job_files(job)
+                if self._active_job_id is None and len(self._queue) == 0:
+                    self._arm_idle_timer()
                 return job
             if self._active_job_id == job_id:
                 process = job.process
@@ -438,9 +481,12 @@ class JobManager:
                     except OSError:
                         pass
                 self._cleanup_job_files(job)
+                # When the process exits, _run()'s finally block will call _next_job()
                 return job
             job.status = "cancelled"
             self._cleanup_job_files(job)
+            if self._active_job_id is None and len(self._queue) == 0:
+                self._arm_idle_timer()
             return job
 
     def status_summary(self) -> dict[str, Any]:
@@ -462,7 +508,9 @@ class JobManager:
                 if next_job and next_job.status == "queued":
                     self._active_job_id = next_id
                     threading.Thread(target=self._run, args=(next_job,), daemon=True).start()
-                    break
+                    return
+            if self._active_job_id is None and len(self._queue) == 0:
+                self._arm_idle_timer()
 
     def _command(self, job: Job) -> list[str]:
         target_dir = self.download_dir / sanitize_folder_name(job.subfolder) if job.subfolder else self.download_dir
@@ -505,6 +553,12 @@ class JobManager:
             command.extend(["--extractor-args", f"youtube:player_client={self.player_client}"])
         if self.cookies_from_browser:
             command.extend(["--cookies-from-browser", self.cookies_from_browser])
+
+        project_dir = Path(__file__).resolve().parent.parent
+        scripts_dir = project_dir / ".venv" / "Scripts"
+        venv_bin = scripts_dir if scripts_dir.is_dir() else (project_dir / ".venv" / "bin")
+        if (venv_bin / "ffmpeg").is_file() or (venv_bin / "ffmpeg.exe").is_file():
+            command.extend(["--ffmpeg-location", str(venv_bin)])
         if job.kind == "audio":
             command.extend(["--extract-audio", "--audio-format", "mp3", "--audio-quality", "0"])
         else:
@@ -658,9 +712,42 @@ class RequestHandler(BaseHTTPRequestHandler):
         if not self._guard():
             return
         if self.path == "/api/health":
+            yt_dlp_bin = self.server.manager.yt_dlp
+            yt_dlp_ok = bool(shutil.which(yt_dlp_bin) or (Path(yt_dlp_bin).is_file() and os.access(yt_dlp_bin, os.X_OK)))
+            project_dir = Path(__file__).resolve().parent.parent
+            scripts_dir = project_dir / ".venv" / "Scripts"
+            venv_bin = scripts_dir if scripts_dir.is_dir() else (project_dir / ".venv" / "bin")
+            local_ffmpeg = venv_bin / "ffmpeg"
+            if not local_ffmpeg.is_file():
+                local_ffmpeg = venv_bin / "ffmpeg.exe"
+            ffmpeg_ok = bool(shutil.which("ffmpeg") or local_ffmpeg.is_file())
+            missing = []
+            errors = []
+            if not yt_dlp_ok:
+                missing.append("yt-dlp")
+                errors.append("yt-dlp executable was not found. Run scripts/setup.sh.")
+            if not ffmpeg_ok:
+                missing.append("ffmpeg")
+                errors.append("ffmpeg is not installed. High-resolution merging and MP3 conversion require ffmpeg.")
+
+            from service.distro import detect_distro
+            distro_info = detect_distro()
+
+            script_name = "setup-windows.bat" if sys.platform == "win32" else ("setup-mac.sh" if sys.platform == "darwin" else "setup-linux.sh")
+            setup_script = str(project_dir / script_name)
+
             self._json(HTTPStatus.OK, {
                 "ok": True,
-                "ytDlpAvailable": shutil.which(self.server.manager.yt_dlp) is not None,
+                "projectDir": str(project_dir),
+                "setupScript": setup_script,
+                "ytDlpAvailable": yt_dlp_ok,
+                "ffmpegAvailable": ffmpeg_ok,
+                "allPackagesReady": yt_dlp_ok and ffmpeg_ok,
+                "missing": missing,
+                "errors": errors,
+                "distro": distro_info,
+                "pythonVersion": sys.version.split()[0],
+                "platform": sys.platform,
                 "downloadDir": str(self.server.manager.download_dir),
                 **self.server.manager.status_summary(),
             })
@@ -680,6 +767,21 @@ class RequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         if not self._guard():
+            return
+        if self.path == "/api/setup":
+            from service.native_host import run_setup
+            project_dir = Path(__file__).resolve().parent.parent
+            result = run_setup(project_dir)
+            self._json(HTTPStatus.OK, result)
+            return
+        if self.path == "/api/shutdown":
+            self._json(HTTPStatus.OK, {"status": "shutting_down"})
+            cb = self.server.manager._shutdown_callback
+            if cb:
+                def _delayed_shutdown() -> None:
+                    time.sleep(0.15)
+                    cb()
+                threading.Thread(target=_delayed_shutdown, daemon=True).start()
             return
         if self.path != "/api/downloads":
             self._json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
@@ -747,6 +849,12 @@ def parse_args() -> argparse.Namespace:
         default=os.environ.get("OKJA_COOKIES_FROM_BROWSER"),
         help="Browser to import YouTube cookies from (e.g., chrome, safari, firefox, brave)",
     )
+    parser.add_argument(
+        "--idle-timeout",
+        type=int,
+        default=int(os.environ.get("OKJA_IDLE_TIMEOUT", "25")),
+        help="Seconds of inactivity before auto-shutting down (0 to disable)",
+    )
     return parser.parse_args()
 
 
@@ -759,8 +867,10 @@ def main() -> None:
         args.yt_dlp,
         player_client=args.player_client or None,
         cookies_from_browser=args.cookies_from_browser or None,
+        idle_timeout=args.idle_timeout,
     )
     server = ApiServer((args.host, args.port), manager)
+    manager.set_shutdown_callback(lambda: threading.Thread(target=server.shutdown, daemon=True).start())
 
     print("Okja YouTube Saver service is ready")
     print(f"Address: http://{args.host}:{args.port}")

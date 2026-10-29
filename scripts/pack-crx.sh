@@ -10,7 +10,8 @@ for candidate in \
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
   "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" \
   "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge" \
-  "google-chrome" "chromium" "brave-browser"; do
+  "google-chrome" "google-chrome-stable" "chromium" "chromium-browser" \
+  "brave" "brave-browser" "microsoft-edge" "microsoft-edge-stable"; do
   if [ -x "$candidate" ] || command -v "$candidate" >/dev/null 2>&1; then
     chrome_bin="$candidate"
     break
@@ -18,7 +19,7 @@ for candidate in \
 done
 
 if [ -z "$chrome_bin" ]; then
-  echo "Error: Chromium-based browser (Chrome, Brave, Edge) not found." >&2
+  echo "Error: Chromium-based browser (Chrome, Chromium, Brave, Edge) not found." >&2
   exit 1
 fi
 

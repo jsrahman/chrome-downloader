@@ -1,3 +1,5 @@
+import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -351,6 +353,89 @@ class CancelCleanupTests(unittest.TestCase):
             manager.cancel(job.id)
 
             self.assertFalse(final_path.exists())
+
+
+class ShutdownAndIdleTests(unittest.TestCase):
+    def test_idle_timeout_triggers_shutdown_when_empty(self):
+        called = threading.Event()
+        manager = JobManager(Path("/tmp/okja-test"), "yt-dlp", idle_timeout=1)
+        manager.set_shutdown_callback(lambda: called.set())
+        self.assertTrue(called.wait(timeout=2.0))
+
+    def test_idle_timeout_does_not_trigger_while_active_job(self):
+        called = threading.Event()
+        manager = JobManager(Path("/tmp/okja-test"), "yt-dlp", idle_timeout=1)
+        manager.set_shutdown_callback(lambda: called.set())
+        job = Job(id="active-1", url="https://youtube.com/watch?v=dQw4w9WgXcQ", kind="video", quality="720")
+        with manager._lock:
+            manager._jobs[job.id] = job
+            manager._active_job_id = job.id
+            manager._cancel_idle_timer()
+        self.assertFalse(called.wait(timeout=1.5))
+
+    def test_idle_timeout_arms_when_queue_completes(self):
+        called = threading.Event()
+        manager = JobManager(Path("/tmp/okja-test"), "yt-dlp", idle_timeout=1)
+        manager.set_shutdown_callback(lambda: called.set())
+        manager._cancel_idle_timer()
+        manager._next_job()
+        self.assertTrue(called.wait(timeout=2.0))
+
+
+class HealthDiagnosticsTests(unittest.TestCase):
+    def test_status_summary_fields(self):
+        manager = JobManager(Path("/tmp/okja-test"), "yt-dlp")
+        summary = manager.status_summary()
+        self.assertIn("activeJob", summary)
+        self.assertIn("queue", summary)
+        self.assertIn("queueCount", summary)
+        self.assertEqual(summary["queueCount"], 0)
+
+    def test_distro_detection_fields(self):
+        from service.distro import detect_distro
+        info = detect_distro()
+        self.assertIn("os", info)
+        self.assertIn("name", info)
+        self.assertIn("family", info)
+        self.assertIn("pkg_mgr", info)
+        self.assertIn("install_cmd", info)
+
+    def test_fedora_distro_detection(self):
+        import unittest.mock as mock
+        from service.distro import detect_distro
+
+        # Test Fedora via /etc/os-release ID=fedora
+        fake_os_release = 'NAME="Fedora Linux"\nVERSION="41 (Workstation Edition)"\nID=fedora\nPRETTY_NAME="Fedora Linux 41"\n'
+        with mock.patch("sys.platform", "linux"):
+            with mock.patch("os.path.isfile", side_effect=lambda p: p in {"/etc/os-release"}):
+                with mock.patch("builtins.open", mock.mock_open(read_data=fake_os_release)):
+                    with mock.patch("shutil.which", return_value="/usr/bin/dnf"):
+                        info = detect_distro()
+                        self.assertEqual(info["os"], "linux")
+                        self.assertEqual(info["family"], "fedora")
+                        self.assertIn("dnf", info["pkg_mgr"])
+                        self.assertIn("sudo dnf", info["install_cmd"])
+                        self.assertNotIn("apt", info["install_cmd"])
+
+        # Test Fedora derivative with ID_LIKE=fedora
+        fake_nobara = 'NAME="Nobara Linux"\nID=nobara\nID_LIKE="rhel fedora"\nPRETTY_NAME="Nobara Linux 40"\n'
+        with mock.patch("sys.platform", "linux"):
+            with mock.patch("os.path.isfile", side_effect=lambda p: p in {"/etc/os-release"}):
+                with mock.patch("builtins.open", mock.mock_open(read_data=fake_nobara)):
+                    with mock.patch("shutil.which", return_value="/usr/bin/dnf"):
+                        info = detect_distro()
+                        self.assertEqual(info["family"], "fedora")
+                        self.assertIn("sudo dnf", info["install_cmd"])
+                        self.assertNotIn("apt", info["install_cmd"])
+
+        # Test legacy /etc/fedora-release file presence
+        with mock.patch("sys.platform", "linux"):
+            with mock.patch("os.path.isfile", side_effect=lambda p: p in {"/etc/fedora-release"}):
+                with mock.patch("builtins.open", mock.mock_open(read_data="Fedora release 41 (Workstation Edition)")):
+                    with mock.patch("shutil.which", return_value="/usr/bin/dnf"):
+                        info = detect_distro()
+                        self.assertEqual(info["family"], "fedora")
+                        self.assertNotIn("apt", info["install_cmd"])
 
 
 if __name__ == "__main__":

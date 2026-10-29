@@ -3,6 +3,7 @@ importScripts("shared.js");
 const YOUTUBE_HOSTS = new Set([
   "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be",
 ]);
+const NATIVE_HOST = "com.okja.saver";
 
 function isVideoUrl(rawUrl) {
   try {
@@ -15,6 +16,7 @@ function isVideoUrl(rawUrl) {
 
 let trackerTimer = null;
 let lastKnownActiveJob = null;
+let shutdownTimer = null;
 
 function updateBadge(input) {
   try {
@@ -39,6 +41,81 @@ function updateBadge(input) {
       chrome.action.setTitle({ title: "Okja YouTube Saver" });
     }
   } catch (_e) {}
+}
+
+async function isServiceAlive() {
+  try {
+    const { port } = await OkjaApi.getSettings();
+    const res = await fetch(OkjaApi.serviceUrl(port, "/api/status"));
+    return res.ok;
+  } catch (_e) {
+    return false;
+  }
+}
+
+function launchNativeService(port) {
+  return new Promise((resolve, reject) => {
+    if (!chrome.runtime?.sendNativeMessage) {
+      reject(new Error("Native messaging is not supported in this browser environment."));
+      return;
+    }
+    chrome.runtime.sendNativeMessage(
+      NATIVE_HOST,
+      { action: "start", port },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message || "Failed to launch companion service."));
+        } else {
+          resolve(response);
+        }
+      }
+    );
+  });
+}
+
+async function ensureServiceRunning() {
+  if (await isServiceAlive()) {
+    return true;
+  }
+
+  const { port } = await OkjaApi.getSettings();
+
+  try {
+    await launchNativeService(port);
+  } catch (err) {
+    console.warn("Native host start error:", err);
+    throw new Error(
+      "Download service is not running. Please run ./scripts/install-native-host.sh once to enable auto-start, or ./scripts/start-service.sh."
+    );
+  }
+
+  // Poll until service is responsive (up to 4 seconds)
+  for (let i = 0; i < 40; i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    if (await isServiceAlive()) {
+      return true;
+    }
+  }
+
+  throw new Error("Download service started but failed to respond on port " + port);
+}
+
+function scheduleShutdown() {
+  if (shutdownTimer) clearTimeout(shutdownTimer);
+  shutdownTimer = setTimeout(async () => {
+    try {
+      const statusData = await OkjaApi.apiRequest("/api/status");
+      const active = statusData?.activeJob;
+      const queueCount = Number(statusData?.queueCount ?? (Array.isArray(statusData?.queue) ? statusData.queue.length : 0));
+      if (!active && queueCount === 0) {
+        await OkjaApi.apiRequest("/api/shutdown", { method: "POST" });
+      }
+    } catch (_e) {
+      // Service may already be closed
+    } finally {
+      shutdownTimer = null;
+    }
+  }, 1500);
 }
 
 async function checkAndUpdateStatus() {
@@ -91,6 +168,10 @@ function notifyComplete(job) {
 }
 
 function startTracking() {
+  if (shutdownTimer) {
+    clearTimeout(shutdownTimer);
+    shutdownTimer = null;
+  }
   if (trackerTimer) return;
   trackerTimer = setInterval(async () => {
     try {
@@ -115,6 +196,7 @@ function startTracking() {
         updateBadge(null);
         clearInterval(trackerTimer);
         trackerTimer = null;
+        scheduleShutdown();
       }
     } catch (_e) {
       updateBadge(null);
@@ -161,11 +243,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       channels: Number(message.channels) || 8,
     };
 
-    OkjaApi.apiRequest("/api/downloads", {
-      method: "POST",
-      body: JSON.stringify(downloadPayload),
-    })
-      .then((data) => {
+    (async () => {
+      try {
+        await ensureServiceRunning();
+        const data = await OkjaApi.apiRequest("/api/downloads", {
+          method: "POST",
+          body: JSON.stringify(downloadPayload),
+        });
         startTracking();
         checkAndUpdateStatus();
         broadcastToTabs({
@@ -175,8 +259,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           title: message.title || data.job?.title || "",
         });
         sendResponse({ ok: true, ...data });
-      })
-      .catch((err) => sendResponse({ ok: false, error: err.message }));
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message });
+      }
+    })();
     return true;
   }
 
@@ -190,28 +276,86 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           jobId: message.jobId,
         });
         sendResponse({ ok: true, ...data });
+        scheduleShutdown();
       })
       .catch((err) => sendResponse({ ok: false, error: err.message }));
     return true;
   }
 
-  if (message.type === "open-download" && isVideoUrl(message.url)) {
-    const title = String(message.title || "").slice(0, 300);
-    const launchUrl = new URL(chrome.runtime.getURL("popup.html"));
-    launchUrl.searchParams.set("fromShare", "1");
-    launchUrl.searchParams.set("url", message.url);
-    if (title) launchUrl.searchParams.set("title", title);
+  if (message.type === "open-onboarding") {
+    chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") });
+    sendResponse({ ok: true });
+    return true;
+  }
 
-    chrome.storage.local.set({
-      sharedVideo: { url: message.url, title, createdAt: Date.now() },
-    }).then(() => chrome.tabs.create({ url: launchUrl.href }))
-      .then(() => sendResponse({ ok: true }))
-      .catch((error) => sendResponse({ ok: false, error: error.message }));
+  if (message.type === "open-download" && isVideoUrl(message.url)) {
+    (async () => {
+      const { onboardingCompleted } = await chrome.storage.local.get("onboardingCompleted");
+      if (!onboardingCompleted) {
+        chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") });
+        sendResponse({ ok: false, error: "Setup and verification required." });
+        return;
+      }
+      const title = String(message.title || "").slice(0, 300);
+      const launchUrl = new URL(chrome.runtime.getURL("popup.html"));
+      launchUrl.searchParams.set("fromShare", "1");
+      launchUrl.searchParams.set("url", message.url);
+      if (title) launchUrl.searchParams.set("title", title);
+
+      chrome.storage.local.set({
+        sharedVideo: { url: message.url, title, createdAt: Date.now() },
+      }).then(() => chrome.tabs.create({ url: launchUrl.href }))
+        .then(() => sendResponse({ ok: true }))
+        .catch((error) => sendResponse({ ok: false, error: error.message }));
+    })();
     return true;
   }
 });
 
-// Periodic background check via alarms API to ensure badge remains up to date
+// Manage dynamic action popup based on package verification state
+async function syncActionPopup() {
+  try {
+    const { onboardingCompleted } = await chrome.storage.local.get("onboardingCompleted");
+    if (onboardingCompleted) {
+      await chrome.action.setPopup({ popup: "popup.html" });
+    } else {
+      // Unset popup so clicking the action icon triggers chrome.action.onClicked
+      await chrome.action.setPopup({ popup: "" });
+    }
+  } catch (_e) {}
+}
+
+if (chrome.action?.onClicked) {
+  chrome.action.onClicked.addListener(async () => {
+    const { onboardingCompleted } = await chrome.storage.local.get("onboardingCompleted");
+    if (!onboardingCompleted) {
+      const onboardingUrl = chrome.runtime.getURL("onboarding.html");
+      const tabs = await chrome.tabs.query({ url: onboardingUrl });
+      if (tabs.length > 0) {
+        chrome.tabs.update(tabs[0].id, { active: true });
+        if (tabs[0].windowId) chrome.windows.update(tabs[0].windowId, { focused: true });
+      } else {
+        chrome.tabs.create({ url: onboardingUrl });
+      }
+    } else {
+      await chrome.action.setPopup({ popup: "popup.html" });
+      if (chrome.action.openPopup) {
+        try {
+          await chrome.action.openPopup();
+        } catch (_e) {}
+      }
+    }
+  });
+}
+
+// React instantly to verification status changes in storage
+chrome.storage?.onChanged?.addListener((changes, area) => {
+  if (area === "local" && ("onboardingCompleted" in changes)) {
+    syncActionPopup();
+  }
+});
+
+// Periodic background check via alarms API to keep badge updated if active
 try {
   if (chrome.alarms) {
     chrome.alarms.create("status-badge-sync", { periodInMinutes: 1 });
@@ -224,5 +368,15 @@ try {
 } catch (_e) {}
 
 checkAndUpdateStatus();
-chrome.runtime.onStartup.addListener(checkAndUpdateStatus);
-chrome.runtime.onInstalled.addListener(checkAndUpdateStatus);
+syncActionPopup();
+chrome.runtime.onStartup.addListener(() => {
+  checkAndUpdateStatus();
+  syncActionPopup();
+});
+chrome.runtime.onInstalled.addListener(async (details) => {
+  await checkAndUpdateStatus();
+  await syncActionPopup();
+  if (details?.reason === "install") {
+    chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") });
+  }
+});

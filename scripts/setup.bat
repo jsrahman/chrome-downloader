@@ -16,14 +16,6 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-where ffmpeg >nul 2>nul
-if %errorlevel% neq 0 (
-    echo [WARNING] ffmpeg was not found in PATH.
-    echo It is recommended to install FFmpeg for merging video and audio:
-    echo   winget install Gyan.FFmpeg
-    echo.
-)
-
 echo Creating Python virtual environment (.venv)...
 python -m venv .venv
 if %errorlevel% neq 0 (
@@ -32,13 +24,21 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo Upgrading pip and installing yt-dlp...
-call .\.venv\Scripts\python.exe -m pip install --upgrade pip
-call .\.venv\Scripts\python.exe -m pip install --upgrade "yt-dlp[default]"
+echo Upgrading pip and installing yt-dlp and standalone ffmpeg...
+call .\.venv\Scripts\python.exe -m pip install --quiet --upgrade pip
+call .\.venv\Scripts\python.exe -m pip install --quiet --upgrade "yt-dlp[default]" imageio-ffmpeg
+
+rem Extract and copy standalone ffmpeg.exe to .venv\Scripts\ffmpeg.exe
+call .\.venv\Scripts\python.exe -c "import os, sys, shutil, imageio_ffmpeg; src = imageio_ffmpeg.get_ffmpeg_exe(); dst = os.path.join(sys.prefix, 'Scripts', 'ffmpeg.exe'); shutil.copy2(src, dst) if os.path.isfile(src) and not os.path.isfile(dst) else None"
+
+rem Register Native Messaging Host
+if exist scripts\install-native-host.bat (
+    call scripts\install-native-host.bat
+)
 
 echo.
 echo ==============================================
 echo   Setup Complete!
-echo   Start the service with: scripts\start-service.bat
+echo   Okja Saver will start automatically on demand.
 echo ==============================================
 pause

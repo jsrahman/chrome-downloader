@@ -353,12 +353,13 @@
     container.className = "style-scope ytd-menu-renderer okja-toolbar-item";
 
     container.innerHTML = `
-      <button type="button" class="ytSpecButtonShapeNextHost ytSpecButtonShapeNextTonal ytSpecButtonShapeNextMono ytSpecButtonShapeNextSizeM ytSpecButtonShapeNextIconButton ytSpecButtonShapeNextEnableBackdropFilterExperiment okja-yt-btn" title="Download with Okja Saver" aria-label="Download with Okja Saver">
+      <button type="button" class="ytSpecButtonShapeNextHost ytSpecButtonShapeNextTonal ytSpecButtonShapeNextMono ytSpecButtonShapeNextSizeM ytSpecButtonShapeNextEnableBackdropFilterExperiment okja-yt-btn" title="Download with Okja Saver" aria-label="Download with Okja Saver">
         <div aria-hidden="true" class="ytSpecButtonShapeNextIcon ytSpecButtonShapeNextElevatedContent">
           <span class="ytIconWrapperHost okja-btn-icon-wrapper">
             ${DOWNLOAD_ICON_SVG}
           </span>
         </div>
+        <span class="okja-btn-text">Download</span>
       </button>
     `;
 
@@ -375,67 +376,67 @@
     return container;
   }
 
-  function findMoreActionsButton() {
-    const byAria = document.querySelector(
-      'ytd-watch-metadata ytd-menu-renderer button[aria-label="More actions"], ' +
-      'ytd-menu-renderer button[aria-label="More actions"], ' +
-      '#top-level-buttons-computed button[aria-label="More actions"]'
+  function findWatchActionsMenu() {
+    return document.querySelector(
+      "ytd-watch-metadata #actions ytd-menu-renderer, " +
+      "ytd-watch-metadata ytd-menu-renderer, " +
+      "#above-the-fold #actions ytd-menu-renderer, " +
+      "#actions-inner ytd-menu-renderer, " +
+      "ytd-watch-flexy #actions ytd-menu-renderer, " +
+      "ytd-watch-flexy ytd-menu-renderer#menu, " +
+      "#actions ytd-menu-renderer"
     );
-    if (byAria) return byAria;
-
-    const allSvgPaths = document.querySelectorAll(
-      'ytd-watch-metadata ytd-menu-renderer svg path, ' +
-      'ytd-menu-renderer svg path, ' +
-      '#top-level-buttons-computed svg path'
-    );
-    for (const p of allSvgPaths) {
-      const d = p.getAttribute("d") || "";
-      if (d.includes("M6 10a2") || d.includes("M6 10") || d.includes("10a2 2 0 100 4")) {
-        const btn = p.closest("button");
-        if (btn) return btn;
-      }
-    }
-
-    const popupBtn = document.querySelector(
-      'ytd-watch-metadata ytd-menu-renderer button[aria-haspopup="true"], ' +
-      'ytd-menu-renderer button[aria-haspopup="true"]'
-    );
-    if (popupBtn) return popupBtn;
-
-    return null;
   }
 
   function findInsertionTarget() {
-    // 1. Right before YouTube's 3-dot "More actions" button (always visible in toolbar)
-    const moreActionsBtn = findMoreActionsButton();
-    if (moreActionsBtn) {
-      const shape = moreActionsBtn.closest("yt-button-shape, ytd-button-renderer, yt-button-view-model, ytd-menu-renderer > div") || moreActionsBtn.parentElement;
-      if (shape && shape.parentElement) {
-        return { parent: shape.parentElement, before: shape };
+    // 1. Check YouTube watch page metadata actions menu
+    const watchMenu = findWatchActionsMenu();
+    if (watchMenu) {
+      const topButtons = watchMenu.querySelector("#top-level-buttons-computed");
+      if (topButtons) {
+        // Place right after native Like/Share buttons or before native download
+        const nativeDownload = topButtons.querySelector("ytd-download-button-renderer");
+        if (nativeDownload && nativeDownload.parentElement === topButtons) {
+          return { parent: topButtons, before: nativeDownload };
+        }
+        return { parent: topButtons, before: null };
       }
+
+      // If topButtons not found, place right before the 3-dot dropdown button inside watchMenu
+      const dots = watchMenu.querySelector(
+        "yt-icon-button.dropdown-trigger, " +
+        "yt-icon-button#button, " +
+        "#button-shape, " +
+        "button[aria-label*='action' i], " +
+        "button[aria-label*='more' i]"
+      );
+      if (dots && dots.parentElement === watchMenu) {
+        return { parent: watchMenu, before: dots };
+      }
+      if (dots && dots.parentElement && dots.parentElement.parentElement === watchMenu) {
+        return { parent: watchMenu, before: dots.parentElement };
+      }
+
+      return { parent: watchMenu, before: null };
     }
 
-    // 2. Right before YouTube's native download button if present in top buttons
-    const nativeDownload = document.querySelector(
-      "ytd-watch-metadata #actions ytd-download-button-renderer, " +
-      "#top-level-buttons-computed ytd-download-button-renderer, " +
-      "ytd-download-button-renderer"
+    // 2. Direct #top-level-buttons-computed on watch page
+    const directTopButtons = document.querySelector(
+      "ytd-watch-metadata #actions #top-level-buttons-computed, " +
+      "ytd-watch-metadata #top-level-buttons-computed"
     );
-    if (nativeDownload && nativeDownload.parentElement) {
-      return { parent: nativeDownload.parentElement, before: nativeDownload };
+    if (directTopButtons) {
+      return { parent: directTopButtons, before: null };
     }
 
-    // 3. Fallback: append to #top-level-buttons-computed or #flexible-item-buttons
-    const topButtons = document.querySelector(
-      "ytd-watch-metadata #actions ytd-menu-renderer #top-level-buttons-computed, " +
-      "ytd-watch-metadata ytd-menu-renderer #top-level-buttons-computed, " +
-      "#menu-container ytd-menu-renderer #top-level-buttons-computed, " +
-      "#top-level-buttons-computed, " +
-      "ytd-watch-metadata #actions, " +
-      "ytd-menu-renderer #flexible-item-buttons"
+    // 3. Shorts active player actions
+    const shortsActions = document.querySelector(
+      "ytd-reel-video-renderer[is-active] #actions, " +
+      "ytd-reel-video-renderer[is-active] #menu, " +
+      "ytd-shorts #actions"
     );
-    if (topButtons) {
-      return { parent: topButtons, before: null };
+    if (shortsActions) {
+      return { parent: shortsActions, before: shortsActions.firstElementChild };
     }
 
     return null;
@@ -444,9 +445,14 @@
   function addToolbarButton() {
     if (!isVideoWatchPage()) return;
 
+    const watchMenu = findWatchActionsMenu();
     const existing = document.getElementById(TOOLBAR_CONTAINER_ID);
+
     if (existing && existing.isConnected) {
-      return;
+      if (watchMenu && watchMenu.contains(existing)) {
+        return; // Cleanly attached in the active watch actions menu
+      }
+      existing.remove(); // Stale or outside watchMenu, clean up and re-attach
     }
 
     const target = findInsertionTarget();
@@ -459,6 +465,72 @@
       target.parent.appendChild(btn);
     }
     updateToolbarButtonState();
+  }
+
+  // --- Playlist Panel Video Item Buttons (Inside Each Item's #menu) ---
+
+  const PLAYLIST_ITEM_BTN_CLASS = "okja-playlist-item-btn";
+
+  function addPlaylistPanelVideoButtons() {
+    const items = document.querySelectorAll(
+      "ytd-playlist-panel-video-renderer, ytd-playlist-video-renderer"
+    );
+    if (!items || items.length === 0) return;
+
+    for (const item of items) {
+      if (item.querySelector(`.${PLAYLIST_ITEM_BTN_CLASS}`)) {
+        continue;
+      }
+
+      const menuRenderer = item.querySelector("#menu ytd-menu-renderer, ytd-menu-renderer");
+      if (!menuRenderer) continue;
+
+      // Extract video URL for this playlist item
+      const linkEl = item.querySelector("a#wc-endpoint, a#thumbnail, a#video-title-link, a[href*='/watch?v=']");
+      const rawHref = linkEl ? linkEl.getAttribute("href") : "";
+      const videoId = extractVideoId(rawHref);
+      if (!videoId && !rawHref) continue;
+
+      const videoUrl = videoId ? `https://www.youtube.com/watch?v=${videoId}` : new URL(rawHref, window.location.origin).href;
+
+      // Extract title for this playlist item
+      const titleEl = item.querySelector("#video-title, #video-title-link, [title]");
+      const videoTitle = (titleEl ? (titleEl.getAttribute("title") || titleEl.textContent || "") : "YouTube video").trim();
+
+      const container = document.createElement("div");
+      container.className = `style-scope ytd-menu-renderer okja-playlist-item-download-wrapper ${PLAYLIST_ITEM_BTN_CLASS}`;
+      container.innerHTML = `
+        <button type="button" class="okja-playlist-item-download-btn" title="Download '${videoTitle.replace(/"/g, '&quot;')}' with Okja Saver" aria-label="Download '${videoTitle.replace(/"/g, '&quot;')}' with Okja Saver">
+          <span class="okja-btn-icon-wrapper">
+            ${DOWNLOAD_ICON_SVG}
+          </span>
+        </button>
+      `;
+
+      const btn = container.querySelector(".okja-playlist-item-download-btn");
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        downloadVideoWithPreferences(videoUrl, videoTitle, btn);
+      });
+      btn.addEventListener("pointerdown", (e) => {
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+      });
+
+      // Target placement: inside #top-level-buttons-computed or before the 3-dot dropdown trigger
+      const topButtons = menuRenderer.querySelector("#top-level-buttons-computed");
+      const dropdownTrigger = menuRenderer.querySelector("yt-icon-button#button, yt-icon-button.dropdown-trigger, #button-shape, button");
+
+      if (topButtons) {
+        topButtons.appendChild(container);
+      } else if (dropdownTrigger && dropdownTrigger.parentElement === menuRenderer) {
+        menuRenderer.insertBefore(container, dropdownTrigger);
+      } else {
+        menuRenderer.appendChild(container);
+      }
+    }
   }
 
   // --- Playlist Page Header Button ---
@@ -1254,6 +1326,7 @@
       scheduled = false;
       addToolbarButton();
       addPlaylistHeaderButton();
+      addPlaylistPanelVideoButtons();
       addShareAction();
       addDropdownMenuItems();
     });
@@ -1368,6 +1441,8 @@
     fetchStatus();
   });
 
+  window.addEventListener("yt-page-data-updated", scheduleUpdate);
+  window.addEventListener("yt-visibility-refresh", scheduleUpdate);
   window.addEventListener("popstate", scheduleUpdate);
   document.addEventListener("DOMContentLoaded", scheduleUpdate);
 

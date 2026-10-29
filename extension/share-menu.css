@@ -12,13 +12,12 @@ ytd-download-playlist-button-renderer {
   display: none !important;
 }
 
-/* 2. Okja Toolbar Container and Button (36x36 Circular Icon Button) */
+/* 2. Okja Toolbar Container and Button */
 #okja-toolbar-download {
   display: inline-flex !important;
   align-items: center !important;
   position: relative !important;
-  margin-right: 8px !important;
-  margin-left: 8px !important;
+  margin: 0 4px !important;
   flex-shrink: 0 !important;
   vertical-align: middle !important;
   z-index: 10 !important;
@@ -29,17 +28,18 @@ ytd-download-playlist-button-renderer {
 #okja-toolbar-download .okja-yt-btn {
   align-items: center !important;
   justify-content: center !important;
-  background: var(--yt-spec-badge-chip-background, rgba(255, 255, 255, 0.1)) !important;
+  gap: 6px !important;
+  height: 36px !important;
+  padding: 0 14px !important;
+  border-radius: 18px !important;
   border: none !important;
-  border-radius: 50% !important;
+  background: var(--yt-spec-badge-chip-background, rgba(255, 255, 255, 0.1)) !important;
   color: var(--yt-spec-text-primary, #ffffff) !important;
+  font-family: "Roboto", "Arial", sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
   cursor: pointer !important;
   display: inline-flex !important;
-  width: 36px !important;
-  min-width: 36px !important;
-  max-width: 36px !important;
-  height: 36px !important;
-  padding: 0 !important;
   margin: 0 !important;
   transition: background 0.2s ease, transform 0.1s ease !important;
   user-select: none !important;
@@ -48,14 +48,15 @@ ytd-download-playlist-button-renderer {
   outline: none !important;
   visibility: visible !important;
   opacity: 1 !important;
+  white-space: nowrap !important;
 }
 
 #okja-toolbar-download .okja-yt-btn:hover {
-  background: var(--yt-spec-button-chip-background-hover, rgba(0, 0, 0, 0.1)) !important;
+  background: var(--yt-spec-button-chip-background-hover, rgba(255, 255, 255, 0.2)) !important;
 }
 
 #okja-toolbar-download .okja-yt-btn:active {
-  transform: scale(0.92) !important;
+  transform: scale(0.94) !important;
 }
 
 html[dark] #okja-toolbar-download .okja-yt-btn,
@@ -69,19 +70,124 @@ html[dark] #okja-toolbar-download .okja-yt-btn:hover,
   background: rgba(255, 255, 255, 0.2) !important;
 }
 
+html:not([dark]) #okja-toolbar-download .okja-yt-btn {
+  background: rgba(0, 0, 0, 0.05) !important;
+  color: #0f0f0f !important;
+}
+
+html:not([dark]) #okja-toolbar-download .okja-yt-btn:hover {
+  background: rgba(0, 0, 0, 0.1) !important;
+}
+
 #okja-toolbar-download .okja-btn-icon-wrapper {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  width: 24px !important;
-  height: 24px !important;
+  width: 20px !important;
+  height: 20px !important;
   pointer-events: none !important;
 }
 
 #okja-toolbar-download .okja-btn-icon-wrapper svg {
-  width: 22px !important;
-  height: 22px !important;
+  width: 20px !important;
+  height: 20px !important;
   display: block !important;
+}
+
+#okja-toolbar-download .okja-btn-text {
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  line-height: 36px !important;
+  pointer-events: none !important;
+}
+
+/* Shorts layout adaptation */
+ytd-reel-video-renderer #okja-toolbar-download .okja-yt-btn,
+ytd-shorts #okja-toolbar-download .okja-yt-btn {
+  width: 48px !important;
+  height: 48px !important;
+  border-radius: 50% !important;
+  padding: 0 !important;
+}
+
+ytd-reel-video-renderer #okja-toolbar-download .okja-btn-text,
+ytd-shorts #okja-toolbar-download .okja-btn-text {
+  display: none !important;
+}
+
+/* 2b. Playlist Panel Video Item Download Button */
+ytd-playlist-panel-video-renderer #top-level-buttons-computed,
+ytd-playlist-video-renderer #top-level-buttons-computed {
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
+.okja-playlist-item-download-wrapper {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  margin-right: 4px !important;
+  vertical-align: middle !important;
+  position: relative !important;
+  z-index: 5 !important;
+}
+
+.okja-playlist-item-download-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  max-width: 32px !important;
+  border-radius: 50% !important;
+  border: none !important;
+  background: transparent !important;
+  color: var(--yt-spec-text-secondary, #aaaaaa) !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  outline: none !important;
+  box-sizing: border-box !important;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease !important;
+}
+
+ytd-playlist-panel-video-renderer:hover .okja-playlist-item-download-btn,
+.okja-playlist-item-download-btn:hover {
+  color: var(--yt-spec-text-primary, #ffffff) !important;
+  background: var(--yt-spec-badge-chip-background, rgba(255, 255, 255, 0.15)) !important;
+  transform: scale(1.08) !important;
+}
+
+.okja-playlist-item-download-btn:active {
+  transform: scale(0.92) !important;
+}
+
+html:not([dark]) .okja-playlist-item-download-btn {
+  color: var(--yt-spec-text-secondary, #606060) !important;
+}
+
+html:not([dark]) ytd-playlist-panel-video-renderer:hover .okja-playlist-item-download-btn,
+html:not([dark]) .okja-playlist-item-download-btn:hover {
+  color: #0f0f0f !important;
+  background: rgba(0, 0, 0, 0.08) !important;
+}
+
+.okja-playlist-item-download-btn .okja-btn-icon-wrapper {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 20px !important;
+  height: 20px !important;
+  pointer-events: none !important;
+}
+
+.okja-playlist-item-download-btn .okja-btn-icon-wrapper svg {
+  width: 18px !important;
+  height: 18px !important;
+  display: block !important;
+  fill: currentColor !important;
 }
 
 /* 3. YouTube 3-Dot Dropdown Menu Item */

@@ -3,7 +3,15 @@
   "name": "Okja YouTube Saver",
   "version": "1.0.0",
   "description": "Send permitted YouTube videos to a private local downloader.",
-  "permissions": ["activeTab", "storage", "tabs", "notifications", "alarms"],
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtHBGdEtGMLQ5pAWM0PFpvHprLA5Sb5Uzg7ulIPtGm60BsvVyCEClqXUbroQH+FcO8u4xUeH6R40DrvQO7FzPSxts0CdTnlo5Y2ba8fuX/khVtogaZ2FQhwBvrpnM4EZXSRNDj+NMzgSn61bZVuTNkWOzF7Kul3RDcnBxIZSO6xOvDfBTsVoOVjiscM/ko/5M83W9SFuUoZGjuZK5eKO/unEgpzCwXK6LY7C0q0x5YdOEXYoINw5N9FX2ZkzoazyitNBBCIH6lKHYFesTpjvIKWhasuS5BwCtjczFLBgfA2p+AwCLfTl/qkCKlsveTcoUH5/3Iolb1Uyo+4gMg7LcawIDAQAB",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs",
+    "notifications",
+    "alarms",
+    "nativeMessaging"
+  ],
   "host_permissions": ["http://127.0.0.1/*"],
   "icons": {
     "128": "icon128.png"
