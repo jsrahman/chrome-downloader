@@ -19,6 +19,7 @@ const elements = {
   queueList: document.querySelector("#queueList"),
   btnClearQueue: document.querySelector("#btnClearQueue"),
   btnStopAll: document.querySelector("#btnStopAll"),
+  btnStopAllPanel: document.querySelector("#btnStopAllPanel"),
   btnClearCache: document.querySelector("#btnClearCache"),
   message: document.querySelector("#message"),
   settings: document.querySelector("#settings"),
@@ -230,6 +231,8 @@ async function startDownload() {
 async function cancelActiveDownload() {
   if (!currentActiveJobId) return;
   try {
+    elements.progressPanel.classList.add("hidden");
+    elements.progressBar.style.width = "0%";
     chrome.runtime.sendMessage({
       type: "cancel-download",
       jobId: currentActiveJobId,
@@ -238,6 +241,59 @@ async function cancelActiveDownload() {
     });
   } catch (error) {
     showMessage(error.message);
+  }
+}
+
+async function handleClearQueue() {
+  // Instantly clear UI so user sees immediate response
+  elements.queuePanel.classList.add("hidden");
+  elements.queueList.innerHTML = "";
+  if (elements.btnClearQueue) elements.btnClearQueue.disabled = true;
+
+  try {
+    chrome.runtime.sendMessage({ type: "clear-queue" }, (res) => {
+      if (elements.btnClearQueue) elements.btnClearQueue.disabled = false;
+      if (res?.ok) {
+        showMessage(`Queue cleared (${res.clearedCount || 0} items removed).`, true);
+      } else {
+        showMessage(res?.error || "Failed to clear queue.");
+      }
+      pollStatus();
+    });
+  } catch (err) {
+    if (elements.btnClearQueue) elements.btnClearQueue.disabled = false;
+    showMessage(err.message);
+  }
+}
+
+async function handleStopAll() {
+  // Instantly hide both active download and queue panels
+  elements.progressPanel.classList.add("hidden");
+  elements.progressBar.style.width = "0%";
+  elements.queuePanel.classList.add("hidden");
+  elements.queueList.innerHTML = "";
+  currentActiveJobId = "";
+  updateDownloadButton(false);
+  updateBadge(null);
+
+  if (elements.btnStopAll) elements.btnStopAll.disabled = true;
+  if (elements.btnStopAllPanel) elements.btnStopAllPanel.disabled = true;
+
+  try {
+    chrome.runtime.sendMessage({ type: "stop-all" }, (res) => {
+      if (elements.btnStopAll) elements.btnStopAll.disabled = false;
+      if (elements.btnStopAllPanel) elements.btnStopAllPanel.disabled = false;
+      if (res?.ok) {
+        showMessage("All downloads and queued items stopped.", true);
+      } else {
+        showMessage(res?.error || "Failed to stop downloads.");
+      }
+      pollStatus();
+    });
+  } catch (err) {
+    if (elements.btnStopAll) elements.btnStopAll.disabled = false;
+    if (elements.btnStopAllPanel) elements.btnStopAllPanel.disabled = false;
+    showMessage(err.message);
   }
 }
 
@@ -291,32 +347,9 @@ document.querySelector("#btnOpenOnboard")?.addEventListener("click", () => {
 });
 elements.download.addEventListener("click", startDownload);
 elements.cancel.addEventListener("click", cancelActiveDownload);
-
-elements.btnClearQueue?.addEventListener("click", () => {
-  if (elements.btnClearQueue) elements.btnClearQueue.disabled = true;
-  chrome.runtime.sendMessage({ type: "clear-queue" }, (res) => {
-    if (elements.btnClearQueue) elements.btnClearQueue.disabled = false;
-    if (res?.ok) {
-      showMessage(`Queue cleared (${res.clearedCount || 0} items removed).`, true);
-    } else {
-      showMessage(res?.error || "Failed to clear queue.");
-    }
-    pollStatus();
-  });
-});
-
-elements.btnStopAll?.addEventListener("click", () => {
-  if (elements.btnStopAll) elements.btnStopAll.disabled = true;
-  chrome.runtime.sendMessage({ type: "stop-all" }, (res) => {
-    if (elements.btnStopAll) elements.btnStopAll.disabled = false;
-    if (res?.ok) {
-      showMessage("All downloads and queued items stopped.", true);
-    } else {
-      showMessage(res?.error || "Failed to stop downloads.");
-    }
-    pollStatus();
-  });
-});
+elements.btnStopAllPanel?.addEventListener("click", handleStopAll);
+elements.btnStopAll?.addEventListener("click", handleStopAll);
+elements.btnClearQueue?.addEventListener("click", handleClearQueue);
 
 elements.btnClearCache?.addEventListener("click", () => {
   if (elements.btnClearCache) elements.btnClearCache.disabled = true;

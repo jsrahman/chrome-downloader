@@ -415,6 +415,10 @@ class JobManager:
                     if proc and proc.poll() is None:
                         try:
                             proc.terminate()
+                            try:
+                                proc.wait(timeout=0.2)
+                            except subprocess.TimeoutExpired:
+                                proc.kill()
                         except OSError:
                             pass
                     self._cleanup_job_files(active_job)
@@ -636,6 +640,10 @@ class JobManager:
                 if process and process.poll() is None:
                     try:
                         process.terminate()
+                        try:
+                            process.wait(timeout=0.2)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
                     except OSError:
                         pass
                 self._cleanup_job_files(job)
@@ -751,6 +759,12 @@ class JobManager:
             last_stream_raw = 0.0
             assert process.stdout is not None
             while True:
+                if job.status == "cancelled":
+                    try:
+                        process.kill()
+                    except OSError:
+                        pass
+                    break
                 raw_line = process.stdout.readline()
                 if not raw_line:
                     break

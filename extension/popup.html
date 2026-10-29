@@ -37,8 +37,9 @@
         <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
         <p id="progressDetail" class="muted"></p>
         <p id="errorText" class="error hidden"></p>
-        <div class="action-row">
-          <button id="cancel" class="secondary-button" type="button">Cancel</button>
+        <div class="action-row" style="display: flex; gap: 8px;">
+          <button id="cancel" class="secondary-button" type="button" style="flex: 1;" title="Cancel current downloading video">Cancel current</button>
+          <button id="btnStopAllPanel" class="secondary-button danger" type="button" style="flex: 1;" title="Stop downloading and remove all queued videos">Stop all</button>
         </div>
       </section>
 

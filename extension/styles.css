@@ -66,6 +66,8 @@ select:focus, input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #
 
 .secondary-button { color: var(--text); background: var(--surface-2); border: 1px solid var(--line); }
 .secondary-button:hover { background: #252c28; }
+.secondary-button.danger { color: var(--error); border-color: #63352f; background: #201311; }
+.secondary-button.danger:hover { background: #2d1815; border-color: var(--error); }
 
 /* Progress Panel (Active Download) */
 .progress-panel { margin-bottom: 18px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
