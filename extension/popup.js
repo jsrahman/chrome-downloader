@@ -28,64 +28,29 @@ let currentActiveJobId = "";
 let previousJob = null;
 let pollTimer = null;
 
-// Task-Specific Alert Configurations
-const ALERT_CONFIGS = {
-  start: {
-    icon: "info",
-    iconColor: "#38bdf8",       // Electric Cyan / Blue
-    className: "toast-start",
-    defaultTitle: "Download Started",
-  },
-  queue: {
-    icon: "info",
-    iconColor: "#f59e0b",       // Vivid Amber / Orange
-    className: "toast-queue",
-    defaultTitle: "Added to Queue",
-  },
-  complete: {
-    icon: "success",
-    iconColor: "#b8f548",       // Signature Lime Green
-    className: "toast-complete",
-    defaultTitle: "Download Complete! ✓",
-  },
-  cancelled: {
-    icon: "info",
-    iconColor: "#a855f7",       // Lavender / Purple
-    className: "toast-cancelled",
-    defaultTitle: "Download Cancelled",
-  },
-  error: {
-    icon: "error",
-    iconColor: "#ff5252",       // Coral Red
-    className: "toast-error",
-    defaultTitle: "Download Failed",
-  },
-};
+function updateBadge(statusData) {
+  try {
+    let count = 0;
+    if (typeof statusData === "number") {
+      count = Math.max(0, statusData);
+    } else if (statusData && typeof statusData === "object") {
+      const queueCount = Number(statusData.queueCount ?? (Array.isArray(statusData.queue) ? statusData.queue.length : 0));
+      const activeCount = (statusData.activeJob && ["downloading", "queued"].includes(statusData.activeJob.status)) ? 1 : 0;
+      count = queueCount + activeCount;
+    }
 
-function showAlert(type, text, customTitle, timer = 3800) {
-  if (typeof Swal === "undefined") return;
-  const config = ALERT_CONFIGS[type] || ALERT_CONFIGS.start;
-
-  Swal.fire({
-    toast: true,
-    position: "bottom-end",
-    icon: config.icon,
-    iconColor: config.iconColor,
-    title: customTitle || config.defaultTitle,
-    text: text || "",
-    showConfirmButton: false,
-    timer: timer,
-    timerProgressBar: true,
-    background: "#141816",
-    color: "#f5f7f5",
-    customClass: {
-      popup: `okja-swal-toast ${config.className}`,
-    },
-    didOpen: (toast) => {
-      toast.onmouseenter = Swal.stopTimer;
-      toast.onmouseleave = Swal.resumeTimer;
-    },
-  });
+    if (count > 0) {
+      chrome.action.setBadgeText({ text: String(count) });
+      chrome.action.setBadgeBackgroundColor({ color: "#f59e0b" });
+      if (chrome.action.setBadgeTextColor) {
+        chrome.action.setBadgeTextColor({ color: "#141816" });
+      }
+      chrome.action.setTitle({ title: `Okja Saver (${count} in queue)` });
+    } else {
+      chrome.action.setBadgeText({ text: "" });
+      chrome.action.setTitle({ title: "Okja YouTube Saver" });
+    }
+  } catch (_e) {}
 }
 
 function supportedVideoUrl(rawUrl) {
@@ -128,17 +93,12 @@ function selectedKind() {
 }
 
 function renderStatus(statusData) {
-  const activeJob = statusData.activeJob;
+  const activeJob = statusData?.activeJob;
   const isDownloading = Boolean(activeJob && ["downloading", "queued"].includes(activeJob.status));
-  const queue = statusData.queue || [];
+  const queue = statusData?.queue || [];
 
   updateDownloadButton(isDownloading);
-
-  // Check if previous active job completed
-  if (previousJob && previousJob.status === "downloading" && (!activeJob || activeJob.id !== previousJob.id)) {
-    const fn = previousJob.filename ? previousJob.filename.split("/").pop() : "";
-    showAlert("complete", fn || "Saved to downloads folder.", undefined, 4500);
-  }
+  updateBadge(statusData);
   previousJob = activeJob;
 
   // Active Download Panel
@@ -171,14 +131,15 @@ function renderStatus(statusData) {
     `).join("");
 
     elements.queueList.querySelectorAll("[data-cancel-id]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
+      btn.addEventListener("click", () => {
         const jobId = btn.dataset.cancelId;
         btn.disabled = true;
-        try {
-          await OkjaApi.apiRequest(`/api/downloads/${jobId}`, { method: "DELETE" });
-          showAlert("cancelled", "Removed item from queue.");
+        chrome.runtime.sendMessage({
+          type: "cancel-download",
+          jobId: jobId,
+        }, () => {
           pollStatus();
-        } catch (_e) {}
+        });
       });
     });
   } else {
@@ -197,7 +158,7 @@ async function pollStatus() {
 
 function startPolling() {
   pollStatus();
-  pollTimer = setInterval(pollStatus, 600);
+  pollTimer = setInterval(pollStatus, 800);
 }
 
 function updateCustomPrefixVisibility() {
@@ -211,43 +172,40 @@ async function startDownload() {
   elements.download.disabled = true;
   try {
     const settings = await OkjaApi.getSettings();
-    const res = await OkjaApi.apiRequest("/api/downloads", {
-      method: "POST",
-      body: JSON.stringify({
-        url: currentUrl,
-        kind: selectedKind(),
-        quality: elements.quality.value,
-        title: elements.videoTitle.textContent,
-        prefixType: elements.prefixType ? elements.prefixType.value : "number",
-        customPrefix: elements.customPrefix ? elements.customPrefix.value.trim() : "",
-        folder: elements.downloadFolder ? elements.downloadFolder.value.trim() : "",
-        channels: settings.channels || 8,
-      }),
+    chrome.runtime.sendMessage({
+      type: "start-download",
+      url: currentUrl,
+      kind: selectedKind(),
+      quality: elements.quality ? elements.quality.value : "1080",
+      title: elements.videoTitle.textContent,
+      prefixType: elements.prefixType ? elements.prefixType.value : "number",
+      customPrefix: elements.customPrefix ? elements.customPrefix.value.trim() : "",
+      folder: elements.downloadFolder ? elements.downloadFolder.value.trim() : "",
+      channels: settings.channels || 8,
+    }, (res) => {
+      elements.download.disabled = !currentUrl;
+      if (chrome.runtime.lastError || !res?.ok) {
+        showMessage(res?.error || chrome.runtime.lastError?.message || "Failed to start download.");
+      } else {
+        pollStatus();
+      }
     });
-
-    if (res.queued) {
-      showAlert("queue", "Video queued. Will download in sequence.");
-    } else {
-      showAlert("start", `Saving video with ${elements.quality.value}p...`);
-    }
-
-    pollStatus();
   } catch (error) {
-    showAlert("error", error.message);
-    showMessage(error.message);
-  } finally {
     elements.download.disabled = !currentUrl;
+    showMessage(error.message);
   }
 }
 
 async function cancelActiveDownload() {
   if (!currentActiveJobId) return;
   try {
-    await OkjaApi.apiRequest(`/api/downloads/${currentActiveJobId}`, { method: "DELETE" });
-    showAlert("cancelled", "Download cancelled.");
-    pollStatus();
+    chrome.runtime.sendMessage({
+      type: "cancel-download",
+      jobId: currentActiveJobId,
+    }, () => {
+      pollStatus();
+    });
   } catch (error) {
-    showAlert("error", error.message);
     showMessage(error.message);
   }
 }

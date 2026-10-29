@@ -3,7 +3,7 @@
   "name": "Okja YouTube Saver",
   "version": "1.0.0",
   "description": "Send permitted YouTube videos to a private local downloader.",
-  "permissions": ["activeTab", "storage", "tabs", "notifications"],
+  "permissions": ["activeTab", "storage", "tabs", "notifications", "alarms"],
   "host_permissions": ["http://127.0.0.1/*"],
   "icons": {
     "128": "icon128.png"
@@ -19,8 +19,8 @@
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*", "https://m.youtube.com/*", "https://music.youtube.com/*"],
-      "js": ["vendor/sweetalert2.all.min.js", "share-menu.js"],
-      "css": ["vendor/sweetalert2-dark.min.css", "share-menu.css"],
+      "js": ["share-menu.js"],
+      "css": ["share-menu.css"],
       "run_at": "document_idle"
     }
   ],

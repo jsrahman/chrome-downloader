@@ -48,6 +48,30 @@ def is_playlist_url(url: str) -> bool:
         return False
 
 
+def extract_video_id(url: str) -> str:
+    """Extract YouTube video ID from supported video URLs."""
+    try:
+        parsed = urlparse(url.strip())
+        host = (parsed.hostname or "").lower().rstrip(".")
+        if host not in {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"}:
+            return ""
+        if host == "youtu.be":
+            vid = parsed.path.strip("/").split("/", 1)[0]
+        elif parsed.path == "/watch":
+            from urllib.parse import parse_qs
+            vid = parse_qs(parsed.query).get("v", [""])[0]
+        elif parsed.path.startswith(("/shorts/", "/live/", "/embed/")):
+            parts = parsed.path.strip("/").split("/")
+            vid = parts[1] if len(parts) > 1 else ""
+        else:
+            vid = ""
+        if vid and VIDEO_ID.fullmatch(vid):
+            return vid
+    except Exception:
+        pass
+    return ""
+
+
 def normalize_youtube_url(value: object, is_playlist: bool = False) -> str:
     """Validate and normalize a single YouTube video or playlist URL."""
     if not isinstance(value, str) or len(value) > 2_048:
@@ -79,16 +103,8 @@ def normalize_youtube_url(value: object, is_playlist: bool = False) -> str:
         return f"https://www.youtube.com/playlist?list={playlist_id}"
 
     # 2. Check video URL
-    video_id = ""
-    if host == "youtu.be":
-        video_id = parsed.path.strip("/").split("/", 1)[0]
-    elif parsed.path == "/watch":
-        video_id = query.get("v", [""])[0]
-    elif parsed.path.startswith(("/shorts/", "/live/", "/embed/")):
-        parts = parsed.path.strip("/").split("/")
-        video_id = parts[1] if len(parts) > 1 else ""
-
-    if video_id and VIDEO_ID.fullmatch(video_id):
+    video_id = extract_video_id(value)
+    if video_id:
         playlist_id = query.get("list", [""])[0]
         if is_playlist and playlist_id and PLAYLIST_ID.fullmatch(playlist_id):
             return f"https://www.youtube.com/playlist?list={playlist_id}"
@@ -355,6 +371,54 @@ class JobManager:
         with self._lock:
             return self._jobs.get(job_id)
 
+    def _cleanup_job_files(self, job: Job) -> None:
+        """Remove any partial or completed files on disk associated with a cancelled job."""
+        target_dir = self.download_dir / sanitize_folder_name(job.subfolder) if job.subfolder else self.download_dir
+
+        # 1. If job has a recorded filename, delete it and common temp suffixes
+        if job.filename:
+            try:
+                p = Path(job.filename)
+                if p.is_file():
+                    p.unlink(missing_ok=True)
+                for ext in [".part", ".ytdl", ".temp", ".webm", ".mp4", ".m4a"]:
+                    part_p = Path(f"{job.filename}{ext}")
+                    if part_p.is_file():
+                        part_p.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+        # 2. Match any file containing the video ID in target_dir or download_dir
+        vid = extract_video_id(job.url)
+        if vid:
+            patterns = [f"*[{vid}]*", f"*{vid}*"]
+            dirs_to_search = [target_dir]
+            if target_dir != self.download_dir and self.download_dir.is_dir():
+                dirs_to_search.append(self.download_dir)
+
+            for d in dirs_to_search:
+                if not d.is_dir():
+                    continue
+                for pat in patterns:
+                    try:
+                        for matched in d.rglob(pat):
+                            if matched.is_file():
+                                try:
+                                    matched.unlink(missing_ok=True)
+                                except OSError:
+                                    pass
+                    except OSError:
+                        pass
+
+        # 3. If target_dir was a custom playlist subfolder and is now empty, remove it
+        if job.subfolder:
+            try:
+                sub_dir = self.download_dir / sanitize_folder_name(job.subfolder)
+                if sub_dir.is_dir() and not any(sub_dir.iterdir()):
+                    sub_dir.rmdir()
+            except OSError:
+                pass
+
     def cancel(self, job_id: str) -> Optional[Job]:
         with self._lock:
             job = self._jobs.get(job_id)
@@ -363,14 +427,20 @@ class JobManager:
             if job_id in self._queue:
                 self._queue.remove(job_id)
                 job.status = "cancelled"
+                self._cleanup_job_files(job)
                 return job
             if self._active_job_id == job_id:
                 process = job.process
-                if process and process.poll() is None:
-                    process.terminate()
                 job.status = "cancelled"
+                if process and process.poll() is None:
+                    try:
+                        process.terminate()
+                    except OSError:
+                        pass
+                self._cleanup_job_files(job)
                 return job
             job.status = "cancelled"
+            self._cleanup_job_files(job)
             return job
 
     def status_summary(self) -> dict[str, Any]:
@@ -502,8 +572,14 @@ class JobManager:
                     recent_lines.append(line)
                     recent_lines = recent_lines[-5:]
 
-            return_code = process.wait()
+            try:
+                return_code = process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                return_code = process.wait()
+
             if job.status == "cancelled":
+                self._cleanup_job_files(job)
                 return
             if return_code == 0:
                 job.progress = 100.0
@@ -518,6 +594,8 @@ class JobManager:
             job.status = "error"
             job.error = f"Download failed: {exc}"
         finally:
+            if job.status == "cancelled":
+                self._cleanup_job_files(job)
             job.process = None
             self._next_job()
 

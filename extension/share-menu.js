@@ -31,6 +31,7 @@
   let lastIconState = "";
   let lastActiveJob = null;
   let lastContextVideo = null;
+  let lastSharedVideoContext = null;
 
   function isVisible(element) {
     if (!element) return false;
@@ -43,63 +44,153 @@
     return path === "/watch" || path.startsWith("/shorts") || path.startsWith("/live");
   }
 
-  // Task-specific Alert Configurations
+  // Minimal Clean Alert Configurations (Bottom-Left)
   const ALERT_CONFIGS = {
     start: {
-      icon: "info",
-      iconColor: "#38bdf8",       // Electric Cyan / Blue
+      color: "#38bdf8",
       className: "toast-start",
       defaultTitle: "Download Started",
+      iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h16a2 2 0 002-2v-2"/></svg>`,
     },
     queue: {
-      icon: "info",
-      iconColor: "#f59e0b",       // Vivid Amber / Orange
+      color: "#f59e0b",
       className: "toast-queue",
       defaultTitle: "Added to Queue",
+      iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6m0 0l-3-3m3 3l3-3"/><path d="M4 12h16M4 18h16"/></svg>`,
     },
     complete: {
-      icon: "success",
-      iconColor: "#b8f548",       // Signature Lime Green
+      color: "#b8f548",
       className: "toast-complete",
-      defaultTitle: "Download Complete! ✓",
+      defaultTitle: "Download Complete",
+      iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#b8f548" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
     },
     cancelled: {
-      icon: "info",
-      iconColor: "#a855f7",       // Lavender / Purple
+      color: "#a855f7",
       className: "toast-cancelled",
       defaultTitle: "Download Cancelled",
+      iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
     },
     error: {
-      icon: "error",
-      iconColor: "#ff5252",       // Coral Red
+      color: "#ff5252",
       className: "toast-error",
       defaultTitle: "Download Failed",
+      iconSvg: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ff5252" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
     },
   };
 
-  function showAlert(type, text, customTitle, timer = 3800) {
-    if (typeof Swal === "undefined") return;
-    const config = ALERT_CONFIGS[type] || ALERT_CONFIGS.start;
+  let lastAlertHash = "";
+  let lastAlertTime = 0;
 
-    Swal.fire({
-      toast: true,
-      position: "bottom-start",
-      icon: config.icon,
-      iconColor: config.iconColor,
-      title: customTitle || config.defaultTitle,
-      text: text || "",
-      showConfirmButton: false,
-      timer: timer,
-      timerProgressBar: true,
-      background: "#141816",
-      color: "#f5f7f5",
-      customClass: {
-        popup: `okja-swal-toast ${config.className}`,
-      },
-      didOpen: (toast) => {
-        toast.onmouseenter = Swal.stopTimer;
-        toast.onmouseleave = Swal.resumeTimer;
-      },
+  function getToastContainer() {
+    let container = document.getElementById("okja-toast-container");
+    if (!container || !container.isConnected) {
+      container = document.createElement("div");
+      container.id = "okja-toast-container";
+      (document.body || document.documentElement).appendChild(container);
+    }
+    return container;
+  }
+
+  function showAlert(type, text, customTitle, timer = 3400) {
+    const config = ALERT_CONFIGS[type] || ALERT_CONFIGS.start;
+    const titleText = customTitle || config.defaultTitle;
+    const safeText = text ? String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
+    const safeTitle = String(titleText).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    // Debounce duplicate identical alerts within 800ms
+    const alertHash = `${type}:${safeTitle}:${safeText}`;
+    const now = Date.now();
+    if (alertHash === lastAlertHash && (now - lastAlertTime) < 800) {
+      return;
+    }
+    lastAlertHash = alertHash;
+    lastAlertTime = now;
+
+    const container = getToastContainer();
+
+    // Limit maximum stacked toasts to 3
+    while (container.children.length >= 3) {
+      container.firstElementChild?.remove();
+    }
+
+    const toast = document.createElement("div");
+    toast.className = `okja-clean-toast ${config.className}`;
+    toast.setAttribute("role", "status");
+    toast.innerHTML = `
+      <div class="okja-toast-badge" aria-hidden="true">
+        ${config.iconSvg}
+      </div>
+      <div class="okja-toast-body">
+        <div class="okja-toast-heading">${safeTitle}</div>
+        ${safeText ? `<div class="okja-toast-detail" title="${safeText}">${safeText}</div>` : ""}
+      </div>
+      <button type="button" class="okja-toast-close" title="Dismiss" aria-label="Dismiss">✕</button>
+      <div class="okja-toast-progress">
+        <div class="okja-toast-bar"></div>
+      </div>
+    `;
+
+    container.appendChild(toast);
+
+    const bar = toast.querySelector(".okja-toast-bar");
+    const closeBtn = toast.querySelector(".okja-toast-close");
+
+    let remainingTime = timer;
+    let startTime = Date.now();
+    let dismissTimeout = null;
+    let isDismissed = false;
+
+    function dismiss() {
+      if (isDismissed) return;
+      isDismissed = true;
+      if (dismissTimeout) clearTimeout(dismissTimeout);
+      toast.classList.add("hiding");
+      setTimeout(() => {
+        toast.remove();
+        if (container.children.length === 0) {
+          container.remove();
+        }
+      }, 160);
+    }
+
+    function startTimer() {
+      if (bar) {
+        bar.style.transition = `transform ${remainingTime}ms linear`;
+        bar.style.transform = "scaleX(0)";
+      }
+      dismissTimeout = setTimeout(dismiss, remainingTime);
+    }
+
+    function pauseTimer() {
+      if (isDismissed || !dismissTimeout) return;
+      clearTimeout(dismissTimeout);
+      dismissTimeout = null;
+      const elapsed = Date.now() - startTime;
+      remainingTime = Math.max(0, remainingTime - elapsed);
+      if (bar) {
+        const currentFraction = remainingTime / timer;
+        bar.style.transition = "none";
+        bar.style.transform = `scaleX(${currentFraction})`;
+      }
+    }
+
+    function resumeTimer() {
+      if (isDismissed || remainingTime <= 0) {
+        dismiss();
+        return;
+      }
+      startTime = Date.now();
+      startTimer();
+    }
+
+    toast.addEventListener("mouseenter", pauseTimer);
+    toast.addEventListener("mouseleave", resumeTimer);
+    if (closeBtn) {
+      closeBtn.addEventListener("click", dismiss);
+    }
+
+    requestAnimationFrame(() => {
+      startTimer();
     });
   }
 
@@ -493,34 +584,130 @@
 
   // --- Target Video Context Resolution ---
 
+  const CARD_SELECTORS = [
+    "ytd-rich-item-renderer",
+    "ytd-video-renderer",
+    "ytd-compact-video-renderer",
+    "ytd-grid-video-renderer",
+    "ytd-playlist-video-renderer",
+    "ytd-reel-item-renderer",
+    "ytd-rich-grid-media",
+    "ytd-lockup-view-model",
+    "yt-lockup-view-model",
+    "ytd-notification-renderer",
+    "ytd-playlist-panel-video-renderer",
+    "ytd-rich-grid-slim-media",
+    "ytd-compact-radio-renderer",
+    "ytd-radio-renderer",
+    "ytd-reel-video-renderer",
+  ].join(", ");
+
+  function extractVideoId(rawUrl) {
+    if (!rawUrl || typeof rawUrl !== "string") return null;
+    try {
+      const url = new URL(rawUrl, window.location.origin);
+      if (url.hostname.includes("youtu.be")) {
+        const id = url.pathname.slice(1).split("/")[0].split("?")[0];
+        if (id) return id;
+      }
+      if (url.pathname.startsWith("/shorts/")) {
+        const id = url.pathname.split("/shorts/")[1].split("/")[0].split("?")[0];
+        if (id) return id;
+      }
+      if (url.pathname.startsWith("/live/")) {
+        const id = url.pathname.split("/live/")[1].split("/")[0].split("?")[0];
+        if (id) return id;
+      }
+      if (url.searchParams.has("v")) {
+        return url.searchParams.get("v");
+      }
+    } catch (_e) {}
+    const match = rawUrl.match(/(?:youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([\w-]{11})/);
+    return match ? match[1] : null;
+  }
+
+  function canonicalizeYouTubeUrl(rawUrl) {
+    if (!rawUrl || typeof rawUrl !== "string") return "";
+    try {
+      const url = new URL(rawUrl, window.location.origin);
+      const listId = url.searchParams.get("list");
+      const videoId = extractVideoId(rawUrl);
+
+      if (videoId && listId) {
+        return `https://www.youtube.com/watch?v=${videoId}&list=${listId}`;
+      } else if (videoId) {
+        return `https://www.youtube.com/watch?v=${videoId}`;
+      } else if (listId) {
+        return `https://www.youtube.com/playlist?list=${listId}`;
+      }
+    } catch (_e) {}
+    return rawUrl;
+  }
+
+  function isPopupOrDialogElement(target) {
+    if (!target || !(target instanceof Element)) return false;
+    return Boolean(target.closest(
+      "tp-yt-iron-dropdown, ytd-popup-container, ytd-menu-popup-renderer, " +
+      "yt-sheet-view-model, ytd-share-panel-renderer, ytd-unified-share-panel-renderer, " +
+      "tp-yt-paper-dialog, [role='dialog'], [role='menu'], .okja-minimal-toast, .swal2-container"
+    ));
+  }
+
+  function isShareDialogElement(target) {
+    if (!target || !(target instanceof Element)) return false;
+    return Boolean(target.closest(
+      "ytd-share-panel-renderer, ytd-unified-share-panel-renderer, " +
+      "tp-yt-paper-dialog#share-dialog, #share-dialog, yt-share-panel-view-model"
+    ));
+  }
+
+  function extractCardContext(card) {
+    if (!card || !(card instanceof Element)) return null;
+
+    const linkEl = card.querySelector(
+      'a#video-title-link, a#thumbnail, a[href*="/watch?v="], a[href*="/shorts/"], ' +
+      'a[href*="youtu.be/"], .yt-lockup-metadata-view-model-wiz__title a, a'
+    );
+    const titleEl = card.querySelector(
+      '#video-title, #video-title-link, h3, [title], ' +
+      '.yt-lockup-metadata-view-model-wiz__title, yt-formatted-string#video-title'
+    );
+
+    const rawHref = linkEl ? linkEl.getAttribute("href") : null;
+    const url = rawHref ? new URL(rawHref, window.location.origin).href : "";
+    const title = titleEl ? (titleEl.getAttribute("title") || titleEl.textContent || "").trim() : "";
+    const videoId = extractVideoId(url);
+
+    if (url && (url.includes("/watch") || url.includes("/shorts") || url.includes("youtu.be"))) {
+      return { url, title, videoId, isCard: true, timestamp: Date.now() };
+    }
+    return null;
+  }
+
   function captureVideoContextFromTrigger(target) {
     if (!target || !(target instanceof Element)) return null;
 
-    const card = target.closest(
-      "ytd-rich-item-renderer, ytd-video-renderer, ytd-compact-video-renderer, " +
-      "ytd-grid-video-renderer, ytd-playlist-video-renderer, ytd-reel-item-renderer, " +
-      "ytd-rich-grid-media, ytd-lockup-view-model, yt-lockup-view-model, " +
-      "ytd-notification-renderer, ytd-playlist-panel-video-renderer, ytd-rich-grid-slim-media"
-    );
+    // Do NOT capture watch page context if target is inside popups, menus, or dialogs
+    if (isPopupOrDialogElement(target)) {
+      return null;
+    }
 
+    const card = target.closest(CARD_SELECTORS);
     if (card) {
-      const linkEl = card.querySelector('a#video-title-link, a#thumbnail, a[href*="/watch?v="], a[href*="/shorts/"]');
-      const titleEl = card.querySelector('#video-title, #video-title-link, h3, [title], .yt-lockup-metadata-view-model-wiz__title');
-      const rawHref = linkEl ? linkEl.getAttribute("href") : null;
-      const url = rawHref ? new URL(rawHref, window.location.origin).href : "";
-      const title = titleEl ? (titleEl.getAttribute("title") || titleEl.textContent || "").trim() : "";
-
-      if (url) {
-        return { url, title, timestamp: Date.now() };
-      }
+      return extractCardContext(card);
     }
 
     if (isVideoWatchPage()) {
-      return {
-        url: window.location.href,
-        title: document.title.replace(/\s*-\s*YouTube\s*$/, "").trim(),
-        timestamp: Date.now(),
-      };
+      const isMainWatch = Boolean(target.closest("ytd-watch-metadata, #player, #movie_player, #top-level-buttons-computed"));
+      if (isMainWatch) {
+        return {
+          url: window.location.href,
+          title: document.title.replace(/\s*-\s*YouTube\s*$/, "").trim(),
+          videoId: extractVideoId(window.location.href),
+          isCard: false,
+          timestamp: Date.now(),
+        };
+      }
     }
 
     return null;
@@ -536,7 +723,7 @@
       }
     }
 
-    if (lastContextVideo && (Date.now() - lastContextVideo.timestamp < 60000) && lastContextVideo.url) {
+    if (lastContextVideo && (Date.now() - lastContextVideo.timestamp < 120000) && lastContextVideo.url) {
       return lastContextVideo;
     }
 
@@ -544,6 +731,8 @@
       return {
         url: window.location.href,
         title: document.title.replace(/\s*-\s*YouTube\s*$/, "").trim(),
+        videoId: extractVideoId(window.location.href),
+        isCard: false,
         timestamp: Date.now(),
       };
     }
@@ -761,9 +950,273 @@
     });
   }
 
+  function findCardByVideoId(videoId) {
+    if (!videoId) return null;
+    const linkSelectors = [
+      `a[href*="watch?v=${videoId}"]`,
+      `a[href*="/shorts/${videoId}"]`,
+      `a[href*="youtu.be/${videoId}"]`,
+    ];
+    for (const sel of linkSelectors) {
+      const links = document.querySelectorAll(sel);
+      for (const link of links) {
+        const card = link.closest(CARD_SELECTORS);
+        if (card) return card;
+      }
+    }
+    return null;
+  }
+
+  function findShareUrlInDialog(dialog) {
+    if (!dialog) return "";
+
+    function cleanUrl(str) {
+      if (!str || typeof str !== "string") return "";
+      const trimmed = str.trim();
+      const match = trimmed.match(/https?:\/\/(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/|live\/|playlist\?list=)|youtu\.be\/)[\w-]+[^\s"']*/i);
+      if (match) return match[0];
+      if (/^(?:www\.)?youtu\.be\/[\w-]+/i.test(trimmed)) {
+        return `https://${trimmed}`;
+      }
+      return "";
+    }
+
+    // 1. Direct input selectors in the dialog
+    const inputSelectors = [
+      "input#share-url",
+      "#share-url input",
+      "ytd-copy-link-renderer input",
+      "yt-copy-link-renderer input",
+      "tp-yt-paper-input#share-url input",
+      "tp-yt-paper-input input",
+      "input[readonly]",
+      "#share-url",
+      "input",
+    ];
+
+    for (const sel of inputSelectors) {
+      const els = dialog.querySelectorAll(sel);
+      for (const el of els) {
+        const val = cleanUrl(el.value || el.getAttribute("value") || "");
+        if (val) return val;
+      }
+    }
+
+    // 2. Search shadow roots of child components
+    const shadowHosts = dialog.querySelectorAll(
+      "ytd-copy-link-renderer, yt-copy-link-renderer, tp-yt-paper-input, #share-url, ytd-share-target-renderer, yt-copy-link-view-model"
+    );
+    for (const host of shadowHosts) {
+      if (host.shadowRoot) {
+        const inputs = host.shadowRoot.querySelectorAll("input, #share-url, [id*='url']");
+        for (const inp of inputs) {
+          const val = cleanUrl(inp.value || inp.getAttribute("value") || "");
+          if (val) return val;
+        }
+      }
+    }
+
+    // 3. Fallback: search in entire document for active share dialog input
+    const globalSelectors = [
+      "ytd-share-panel-renderer input#share-url",
+      "ytd-unified-share-panel-renderer input#share-url",
+      "tp-yt-paper-dialog#share-dialog input#share-url",
+      "#share-dialog input#share-url",
+      "ytd-copy-link-renderer input",
+    ];
+    for (const sel of globalSelectors) {
+      const el = document.querySelector(sel);
+      if (el) {
+        const val = cleanUrl(el.value || el.getAttribute("value") || "");
+        if (val) return val;
+      }
+    }
+
+    return "";
+  }
+
+  function extractFromSocialTargets(dialog) {
+    if (!dialog) return { url: "", title: "" };
+
+    let url = "";
+    let title = "";
+
+    // 1. Mailto target: mailto:?subject=TITLE&body=URL
+    const mailto = dialog.querySelector('a[href^="mailto:"]');
+    if (mailto) {
+      const href = mailto.getAttribute("href") || "";
+      const qIdx = href.indexOf("?");
+      if (qIdx !== -1) {
+        try {
+          const params = new URLSearchParams(href.slice(qIdx + 1));
+          const body = params.get("body") || "";
+          const subject = params.get("subject") || "";
+          if (body.includes("youtu.be") || body.includes("youtube.com")) {
+            url = body.trim();
+          }
+          if (subject && subject.toLowerCase() !== "share") {
+            title = subject.trim();
+          }
+        } catch (_e) {}
+      }
+    }
+
+    // 2. Twitter / X target
+    if (!url) {
+      const twitter = dialog.querySelector('a[href*="twitter.com/intent/tweet"], a[href*="x.com/intent/tweet"]');
+      if (twitter) {
+        const href = twitter.getAttribute("href") || "";
+        try {
+          const u = new URL(href);
+          const tweetUrl = u.searchParams.get("url") || "";
+          const tweetText = u.searchParams.get("text") || "";
+          if (tweetUrl.includes("youtu.be") || tweetUrl.includes("youtube.com")) {
+            url = tweetUrl.trim();
+          }
+          if (tweetText && !title) {
+            title = tweetText.trim();
+          }
+        } catch (_e) {}
+      }
+    }
+
+    // 3. WhatsApp target
+    if (!url) {
+      const wa = dialog.querySelector('a[href*="whatsapp.com/send"]');
+      if (wa) {
+        const href = wa.getAttribute("href") || "";
+        try {
+          const u = new URL(href);
+          const text = u.searchParams.get("text") || "";
+          const match = text.match(/https?:\/\/(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)[\w-]+[^\s]*/i);
+          if (match) {
+            url = match[0];
+            const cand = text.replace(match[0], "").trim();
+            if (cand && !title) title = cand;
+          }
+        } catch (_e) {}
+      }
+    }
+
+    // 4. Data attributes on share targets
+    if (!url) {
+      const dataEls = dialog.querySelectorAll("[data-url], [data-share-url], [data-clipboard-text]");
+      for (const el of dataEls) {
+        const val = el.getAttribute("data-url") || el.getAttribute("data-share-url") || el.getAttribute("data-clipboard-text") || "";
+        if (val.includes("youtu.be") || val.includes("youtube.com")) {
+          url = val.trim();
+          break;
+        }
+      }
+    }
+
+    return { url, title };
+  }
+
+  function resolveShareDialogContext(dialog) {
+    // 1. URL from dialog input elements
+    let foundUrl = findShareUrlInDialog(dialog);
+    let foundTitle = "";
+
+    // 2. URL and Title from social targets (mailto, twitter, etc.)
+    const social = extractFromSocialTargets(dialog);
+    if (!foundUrl && social.url) {
+      foundUrl = social.url;
+    }
+    if (social.title) {
+      foundTitle = social.title;
+    }
+
+    // 3. Video ID extraction
+    const videoId = extractVideoId(foundUrl);
+    const openedVideoId = extractVideoId(window.location.href);
+    const isOpenedVideo = Boolean(videoId && openedVideoId && videoId === openedVideoId);
+
+    // 4. Resolve title
+    if (!foundTitle) {
+      if (isOpenedVideo) {
+        foundTitle = document.title.replace(/\s*-\s*YouTube\s*$/, "").trim();
+      } else if (videoId) {
+        // A. Match lastSharedVideoContext
+        if (lastSharedVideoContext && extractVideoId(lastSharedVideoContext.url) === videoId && lastSharedVideoContext.title) {
+          foundTitle = lastSharedVideoContext.title;
+        }
+        // B. Match lastContextVideo
+        else if (lastContextVideo && extractVideoId(lastContextVideo.url) === videoId && lastContextVideo.title) {
+          foundTitle = lastContextVideo.title;
+        }
+        // C. Look for corresponding video card in the DOM
+        if (!foundTitle) {
+          const card = findCardByVideoId(videoId);
+          if (card) {
+            const titleEl = card.querySelector(
+              '#video-title, #video-title-link, h3, [title], ' +
+              '.yt-lockup-metadata-view-model-wiz__title, yt-formatted-string#video-title'
+            );
+            foundTitle = (titleEl?.getAttribute("title") || titleEl?.textContent || "").trim();
+          }
+        }
+      }
+    }
+
+    // 5. If no URL was found in dialog, fallback to lastSharedVideoContext or lastContextVideo
+    if (!foundUrl) {
+      if (lastSharedVideoContext?.url) {
+        foundUrl = lastSharedVideoContext.url;
+        foundTitle = foundTitle || lastSharedVideoContext.title;
+      } else if (lastContextVideo?.url) {
+        foundUrl = lastContextVideo.url;
+        foundTitle = foundTitle || lastContextVideo.title;
+      } else if (isVideoWatchPage()) {
+        foundUrl = window.location.href;
+        foundTitle = foundTitle || document.title.replace(/\s*-\s*YouTube\s*$/, "").trim();
+      }
+    }
+
+    // 6. Canonicalize URL
+    const canonicalUrl = canonicalizeYouTubeUrl(foundUrl) || foundUrl;
+
+    return {
+      url: canonicalUrl,
+      title: foundTitle || (videoId ? `YouTube Video [${videoId}]` : "YouTube video"),
+    };
+  }
+
+  function closeShareDialog(dialog) {
+    try {
+      const closeBtn = dialog?.querySelector(
+        "button[aria-label='Cancel'], button[aria-label='Close'], #close-button button, yt-icon-button#close-button button"
+      );
+      if (closeBtn) {
+        closeBtn.click();
+        return;
+      }
+      if (dialog && typeof dialog.close === "function") {
+        dialog.close();
+      }
+      if (dialog) {
+        dialog.opened = false;
+        dialog.setAttribute("aria-hidden", "true");
+      }
+      closeOpenDropdowns();
+    } catch (_e) {}
+  }
+
   function addShareAction() {
-    const dialog = [...document.querySelectorAll("ytd-share-panel-renderer #share-dialog, tp-yt-paper-dialog#share-dialog")]
-      .find(isVisible);
+    const dialogs = document.querySelectorAll(
+      "ytd-share-panel-renderer #share-dialog, " +
+      "tp-yt-paper-dialog#share-dialog, " +
+      "ytd-unified-share-panel-renderer, " +
+      "ytd-share-panel-renderer, " +
+      "yt-share-panel-view-model, " +
+      "tp-yt-paper-dialog[role='dialog']"
+    );
+
+    const dialog = [...dialogs].find((d) => isVisible(d) && (
+      d.id === "share-dialog" ||
+      d.querySelector("#share-url, ytd-share-target-renderer, ytd-copy-link-renderer, #share-buttons")
+    ));
+
     if (!dialog || dialog.querySelector(`#${SHARE_ACTION_ID}`)) return;
 
     const action = document.createElement("div");
@@ -773,11 +1226,23 @@
         <span class="okja-share-icon" aria-hidden="true">↓</span>
         <span><strong>Download with Okja Saver</strong><small>Download using default preferences</small></span>
       </button>`;
-    action.querySelector("button").addEventListener("click", () => {
-      handleToolbarButtonClick();
+
+    const shareBtn = action.querySelector(".okja-share-button");
+    shareBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const context = resolveShareDialogContext(dialog);
+      const targetUrl = context.url || window.location.href;
+      const targetTitle = context.title || document.title.replace(/\s*-\s*YouTube\s*$/, "").trim();
+
+      closeShareDialog(dialog);
+      downloadVideoWithPreferences(targetUrl, targetTitle, shareBtn);
     });
 
-    const shareButtons = dialog.querySelector("#share-buttons, ytd-share-target-renderer")?.parentElement;
+    shareBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+
+    const shareButtons = dialog.querySelector("#share-buttons, ytd-share-target-renderer, #targets")?.parentElement;
     (shareButtons || dialog).append(action);
   }
 
@@ -794,43 +1259,79 @@
     });
   }
 
-  // Intercept click on native "Add to queue" inside YouTube's 3-dot dropdown menu
+  // Intercept clicks on 3-dot dropdown items ("Add to queue", "Share") and direct Share buttons
   document.addEventListener("click", (e) => {
     const item = e.target.closest("yt-list-item-view-model, ytd-menu-service-item-renderer");
-    if (!item) return;
+    if (item) {
+      const dropdown = item.closest("#contentWrapper, tp-yt-iron-dropdown, yt-sheet-view-model, ytd-popup-container, ytd-menu-popup-renderer");
+      if (dropdown) {
+        const text = (item.textContent || "").trim().toLowerCase();
+        if (text.includes("share")) {
+          const context = resolveContextForDropdown(item);
+          if (context && context.url) {
+            lastSharedVideoContext = { ...context, timestamp: Date.now() };
+            lastContextVideo = { ...context, timestamp: Date.now() };
+          }
+        } else if (text === "add to queue" || text.startsWith("add to queue")) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
 
-    const dropdown = item.closest("#contentWrapper, tp-yt-iron-dropdown, yt-sheet-view-model, ytd-popup-container, ytd-menu-popup-renderer");
-    if (!dropdown) return;
+          const context = resolveContextForDropdown(item);
+          const targetUrl = context?.url || window.location.href;
+          const targetTitle = context?.title || document.title.replace(/\s*-\s*YouTube\s*$/, "").trim();
 
-    const text = (item.textContent || "").trim();
-    if (text.toLowerCase() === "add to queue" || text.toLowerCase().startsWith("add to queue")) {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
+          closeOpenDropdowns();
+          queueVideoWithPreferences(targetUrl, targetTitle);
+          return;
+        }
+      }
+    }
 
-      const context = resolveContextForDropdown(item);
-      const targetUrl = context?.url || window.location.href;
-      const targetTitle = context?.title || document.title.replace(/\s*-\s*YouTube\s*$/, "").trim();
-
-      closeOpenDropdowns();
-      queueVideoWithPreferences(targetUrl, targetTitle);
+    // Direct Share button on a video card or player toolbar
+    const shareTrigger = e.target.closest(
+      "button[aria-label*='Share' i], [title*='Share' i], ytd-share-target-renderer, #share-button"
+    );
+    if (shareTrigger && !isShareDialogElement(shareTrigger)) {
+      const card = shareTrigger.closest(CARD_SELECTORS);
+      if (card) {
+        const cardCtx = extractCardContext(card);
+        if (cardCtx && cardCtx.url) {
+          lastSharedVideoContext = { ...cardCtx, timestamp: Date.now() };
+          lastContextVideo = { ...cardCtx, timestamp: Date.now() };
+        }
+      } else if (isVideoWatchPage()) {
+        const isMainPlayerShare = Boolean(shareTrigger.closest("ytd-watch-metadata, #top-level-buttons-computed, #actions"));
+        if (isMainPlayerShare) {
+          lastSharedVideoContext = {
+            url: window.location.href,
+            title: document.title.replace(/\s*-\s*YouTube\s*$/, "").trim(),
+            videoId: extractVideoId(window.location.href),
+            timestamp: Date.now(),
+          };
+        }
+      }
     }
   }, { capture: true });
 
   // Capture user interactions with 3-dot buttons across YouTube to track target video & refresh status
   document.addEventListener("pointerdown", (e) => {
-    const ctx = captureVideoContextFromTrigger(e.target);
-    if (ctx) {
-      lastContextVideo = ctx;
+    if (!isPopupOrDialogElement(e.target)) {
+      const ctx = captureVideoContextFromTrigger(e.target);
+      if (ctx) {
+        lastContextVideo = ctx;
+      }
     }
     fetchStatus();
     scheduleUpdate();
   }, { capture: true, passive: true });
 
   document.addEventListener("click", (e) => {
-    const ctx = captureVideoContextFromTrigger(e.target);
-    if (ctx) {
-      lastContextVideo = ctx;
+    if (!isPopupOrDialogElement(e.target)) {
+      const ctx = captureVideoContextFromTrigger(e.target);
+      if (ctx) {
+        lastContextVideo = ctx;
+      }
     }
     scheduleUpdate();
   }, { capture: true, passive: true });
@@ -840,7 +1341,15 @@
     if (message?.type === "download-complete") {
       showAlert("complete", message.filename || (message.title ? `"${message.title}" saved.` : "Video saved to downloads folder."), undefined, 4500);
       fetchStatus();
-    } else if (message?.type === "download-started" || message?.type === "download-cancelled") {
+    } else if (message?.type === "download-started") {
+      if (message.queued) {
+        showAlert("queue", message.title ? `"${message.title}" added to queue.` : "Video queued. Will download in sequence.", "Added to Queue");
+      } else {
+        showAlert("start", message.title ? `Saving "${message.title}"...` : "Download started.", "Download Started");
+      }
+      fetchStatus();
+    } else if (message?.type === "download-cancelled") {
+      showAlert("cancelled", "Download was cancelled.", "Download Cancelled");
       fetchStatus();
     }
   });
@@ -854,6 +1363,7 @@
   window.addEventListener("yt-navigate-finish", () => {
     lastIconState = "";
     lastContextVideo = null;
+    lastSharedVideoContext = null;
     scheduleUpdate();
     fetchStatus();
   });

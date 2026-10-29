@@ -260,5 +260,98 @@ class PlaylistQueueTests(unittest.TestCase):
             self.assertEqual(summary["queue"][0]["file_prefix"], "02 - ")
 
 
+class CancelCleanupTests(unittest.TestCase):
+    def test_cancel_removes_partial_and_video_files(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            download_dir = Path(tmp_dir)
+            manager = JobManager(download_dir, "yt-dlp")
+
+            job = Job(
+                id="test-job-1",
+                url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                kind="video",
+                quality="1080",
+                title="Never Gonna Give You Up",
+                status="downloading",
+            )
+            manager._jobs[job.id] = job
+            manager._active_job_id = job.id
+
+            part_file = download_dir / "Never Gonna Give You Up [dQw4w9WgXcQ].mp4.part"
+            ytdl_file = download_dir / "Never Gonna Give You Up [dQw4w9WgXcQ].mp4.ytdl"
+            temp_frag = download_dir / "Never Gonna Give You Up [dQw4w9WgXcQ].f137.mp4.part"
+            final_file = download_dir / "Never Gonna Give You Up [dQw4w9WgXcQ].mp4"
+
+            part_file.write_text("partial data")
+            ytdl_file.write_text("ytdl state")
+            temp_frag.write_text("fragment data")
+            final_file.write_text("completed file")
+
+            self.assertTrue(part_file.exists())
+            self.assertTrue(ytdl_file.exists())
+            self.assertTrue(temp_frag.exists())
+            self.assertTrue(final_file.exists())
+
+            cancelled = manager.cancel(job.id)
+            self.assertIsNotNone(cancelled)
+            self.assertEqual(cancelled.status, "cancelled")
+
+            # All matching files must be deleted
+            self.assertFalse(part_file.exists())
+            self.assertFalse(ytdl_file.exists())
+            self.assertFalse(temp_frag.exists())
+            self.assertFalse(final_file.exists())
+
+    def test_cancel_removes_files_in_playlist_subfolder_and_cleans_empty_dir(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            download_dir = Path(tmp_dir)
+            manager = JobManager(download_dir, "yt-dlp")
+
+            job = Job(
+                id="test-playlist-job",
+                url="https://www.youtube.com/watch?v=k1b2c3d4e5f",
+                kind="video",
+                quality="720",
+                subfolder="My Course",
+                status="downloading",
+            )
+            manager._jobs[job.id] = job
+            manager._active_job_id = job.id
+
+            course_dir = download_dir / "My Course"
+            course_dir.mkdir(parents=True, exist_ok=True)
+            video_file = course_dir / "01 - Lesson 1 [k1b2c3d4e5f].mp4.part"
+            video_file.write_text("video chunks")
+
+            self.assertTrue(video_file.exists())
+
+            manager.cancel(job.id)
+
+            self.assertFalse(video_file.exists())
+            self.assertFalse(course_dir.exists())
+
+    def test_cancel_removes_known_filename(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            download_dir = Path(tmp_dir)
+            manager = JobManager(download_dir, "yt-dlp")
+
+            final_path = download_dir / "Custom Download.mp3"
+            final_path.write_text("audio data")
+
+            job = Job(
+                id="test-filename-job",
+                url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                kind="audio",
+                quality="best",
+                filename=str(final_path),
+                status="complete",
+            )
+            manager._jobs[job.id] = job
+
+            manager.cancel(job.id)
+
+            self.assertFalse(final_path.exists())
+
+
 if __name__ == "__main__":
     unittest.main()
