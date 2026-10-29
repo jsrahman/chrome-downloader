@@ -18,9 +18,7 @@
           <h1>Okja Saver</h1>
         </div>
         <div style="margin-left: auto; display: flex; gap: 6px; align-items: center;">
-          <button id="btnStopAll" class="icon-button danger" type="button" title="Stop All (Cancel active download & clear queue)" aria-label="Stop all">⏹</button>
           <button id="btnClearCache" class="icon-button" type="button" title="Clear Download Cache (Allows previously downloaded videos to download again)" aria-label="Clear cache">🧹</button>
-          <button id="btnOpenOnboard" class="icon-button" type="button" title="Companion Setup & Package Check" aria-label="Setup and verify companion">⚡</button>
           <button id="settings" class="icon-button" type="button" title="Preferences & Settings" aria-label="Open settings">⚙</button>
         </div>
       </header>
@@ -37,10 +35,7 @@
         <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
         <p id="progressDetail" class="muted"></p>
         <p id="errorText" class="error hidden"></p>
-        <div class="action-row" style="display: flex; gap: 8px;">
-          <button id="cancel" class="secondary-button" type="button" style="flex: 1;" title="Cancel current downloading video">Cancel current</button>
-          <button id="btnStopAllPanel" class="secondary-button danger" type="button" style="flex: 1;" title="Stop downloading and remove all queued videos">Stop all</button>
-        </div>
+        <button id="cancel" class="secondary-button" type="button" style="width: 100%;" title="Cancel current downloading video">Cancel download</button>
       </section>
 
       <!-- Queue Panel (Shows in popup when items are queued) -->
