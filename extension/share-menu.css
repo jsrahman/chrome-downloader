@@ -8,7 +8,8 @@
 ytd-download-button-renderer,
 ytd-menu-renderer ytd-download-button-renderer,
 yt-download-list-item-view-model,
-ytd-download-playlist-button-renderer {
+ytd-download-playlist-button-renderer,
+ytmusic-download-button-renderer {
   display: none !important;
 }
 
@@ -556,9 +557,226 @@ html:not([dark]) .okja-playlist-item-download-btn:hover {
 button.okja-loading,
 .okja-yt-btn.okja-loading,
 .okja-playlist-btn.okja-loading,
-.okja-playlist-item-download-btn.okja-loading {
+.okja-playlist-item-download-btn.okja-loading,
+.okja-music-bar-btn.okja-loading,
+.okja-music-item-download-btn.okja-loading,
+.okja-music-header-btn.okja-loading {
   opacity: 0.65 !important;
   cursor: not-allowed !important;
   pointer-events: none !important;
   transform: none !important;
+}
+
+/* ==========================================================================
+   YouTube Music Specific Styles
+   ========================================================================== */
+
+/* 1. YouTube Music Bottom Player Bar Download Button */
+#okja-music-player-download {
+  display: inline-flex !important;
+  align-items: center !important;
+  position: relative !important;
+  margin: 0 6px !important;
+  flex-shrink: 0 !important;
+  vertical-align: middle !important;
+  z-index: 10 !important;
+}
+
+#okja-music-player-download .okja-music-bar-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  height: 36px !important;
+  padding: 0 14px !important;
+  border-radius: 18px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+  font-family: "Roboto", "Segoe UI", Arial, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  outline: none !important;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease !important;
+  user-select: none !important;
+  white-space: nowrap !important;
+}
+
+#okja-music-player-download .okja-music-bar-btn:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+#okja-music-player-download .okja-music-bar-btn:active {
+  transform: scale(0.95) !important;
+}
+
+#okja-music-player-download .okja-btn-icon-wrapper {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 18px !important;
+  height: 18px !important;
+}
+
+#okja-music-player-download .okja-btn-icon-wrapper svg {
+  width: 18px !important;
+  height: 18px !important;
+  display: block !important;
+  fill: currentColor !important;
+}
+
+/* 2. YouTube Music Track Item Inline Download Button */
+.okja-music-item-download-wrapper {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  margin-right: 4px !important;
+  vertical-align: middle !important;
+  position: relative !important;
+  z-index: 5 !important;
+}
+
+.okja-music-item-download-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  max-width: 32px !important;
+  border-radius: 50% !important;
+  border: none !important;
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.6) !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  outline: none !important;
+  box-sizing: border-box !important;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease !important;
+}
+
+ytmusic-responsive-list-item-renderer:hover .okja-music-item-download-btn,
+ytmusic-player-queue-item:hover .okja-music-item-download-btn,
+.okja-music-item-download-btn:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.15) !important;
+  transform: scale(1.08) !important;
+}
+
+.okja-music-item-download-btn:active {
+  transform: scale(0.92) !important;
+}
+
+.okja-music-item-download-btn .okja-btn-icon-wrapper {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 18px !important;
+  height: 18px !important;
+  pointer-events: none !important;
+}
+
+.okja-music-item-download-btn .okja-btn-icon-wrapper svg {
+  width: 18px !important;
+  height: 18px !important;
+  display: block !important;
+  fill: currentColor !important;
+}
+
+/* 3. YouTube Music Playlist / Album Header Download Button */
+.okja-music-header-container {
+  display: inline-flex !important;
+  align-items: center !important;
+  margin: 0 6px !important;
+  flex-shrink: 0 !important;
+  vertical-align: middle !important;
+}
+
+.okja-music-header-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  height: 36px !important;
+  padding: 0 16px !important;
+  border-radius: 18px !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+  font-family: "Roboto", sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  outline: none !important;
+  transition: background 0.15s ease, transform 0.1s ease !important;
+  user-select: none !important;
+  white-space: nowrap !important;
+}
+
+.okja-music-header-btn:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+
+.okja-music-header-btn:active {
+  transform: scale(0.95) !important;
+}
+
+.okja-music-header-btn .okja-playlist-icon {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 20px !important;
+  height: 20px !important;
+}
+
+.okja-music-header-btn .okja-playlist-icon svg {
+  width: 20px !important;
+  height: 20px !important;
+  display: block !important;
+}
+
+/* 4. YouTube Music 3-Dot Dropdown Menu Item */
+ytmusic-menu-service-item-renderer.okja-context-item {
+  display: block !important;
+  cursor: pointer !important;
+  user-select: none !important;
+}
+
+ytmusic-menu-service-item-renderer.okja-context-item tp-yt-paper-item {
+  display: flex !important;
+  align-items: center !important;
+  padding: 0 16px !important;
+  min-height: 48px !important;
+  cursor: pointer !important;
+  box-sizing: border-box !important;
+  color: #f1f1f1 !important;
+  font-family: Roboto, Arial, sans-serif !important;
+  font-size: 14px !important;
+  transition: background-color 0.15s ease !important;
+}
+
+ytmusic-menu-service-item-renderer.okja-context-item:hover tp-yt-paper-item,
+ytmusic-menu-service-item-renderer.okja-context-item tp-yt-paper-item:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+ytmusic-menu-service-item-renderer.okja-context-item .okja-dropdown-icon {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 24px !important;
+  height: 24px !important;
+  margin-right: 16px !important;
+  flex-shrink: 0 !important;
+  color: inherit !important;
+}
+
+ytmusic-menu-service-item-renderer.okja-context-item .okja-dropdown-icon svg {
+  width: 22px !important;
+  height: 22px !important;
+  display: block !important;
 }

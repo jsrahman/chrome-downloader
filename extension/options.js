@@ -9,6 +9,8 @@ const customPrefixRow = document.querySelector("#customPrefixRow");
 const customPrefixInput = document.querySelector("#customPrefix");
 const downloadFolderInput = document.querySelector("#downloadFolder");
 const channelsSelect = document.querySelector("#channels");
+const markWatchedInput = document.querySelector("#markWatched");
+const cookiesBrowserSelect = document.querySelector("#cookiesBrowser");
 const result = document.querySelector("#result");
 
 function setResult(text, isError = false) {
@@ -58,6 +60,8 @@ async function save() {
   const customPrefix = customPrefixInput ? customPrefixInput.value.trim() : "";
   const downloadFolder = downloadFolderInput ? downloadFolderInput.value.trim() : "";
   const channels = channelsSelect ? Number(channelsSelect.value) || 8 : 8;
+  const markWatched = markWatchedInput ? markWatchedInput.checked : true;
+  const cookiesBrowser = cookiesBrowserSelect ? cookiesBrowserSelect.value || "chrome" : "chrome";
 
   await chrome.storage.local.set({
     port,
@@ -68,6 +72,8 @@ async function save() {
     customPrefix,
     downloadFolder,
     channels,
+    markWatched,
+    cookiesBrowser,
   });
 }
 
@@ -95,7 +101,7 @@ document.querySelector("#test").addEventListener("click", async () => {
   }
 });
 
-OkjaApi.getSettings().then(({ port, defaultKind, defaultQuality, defaultAudioQuality, prefixType, customPrefix, downloadFolder, channels }) => {
+OkjaApi.getSettings().then(({ port, defaultKind, defaultQuality, defaultAudioQuality, prefixType, customPrefix, downloadFolder, channels, markWatched, cookiesBrowser }) => {
   portInput.value = port;
   if (defaultQualitySelect) defaultQualitySelect.value = defaultQuality || "1080";
   if (defaultAudioQualitySelect) defaultAudioQualitySelect.value = defaultAudioQuality || "320";
@@ -103,6 +109,8 @@ OkjaApi.getSettings().then(({ port, defaultKind, defaultQuality, defaultAudioQua
   if (customPrefixInput) customPrefixInput.value = customPrefix || "";
   if (downloadFolderInput) downloadFolderInput.value = downloadFolder || "";
   if (channelsSelect) channelsSelect.value = String(channels || 8);
+  if (markWatchedInput) markWatchedInput.checked = markWatched !== false;
+  if (cookiesBrowserSelect) cookiesBrowserSelect.value = cookiesBrowser || "chrome";
   const kindInput = document.querySelector(`input[name="defaultKind"][value="${defaultKind || "video"}"]`);
   if (kindInput) kindInput.checked = true;
   updateQualityRowVisibility();

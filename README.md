@@ -4,6 +4,11 @@ A local-first Chrome/Chromium extension for downloading YouTube videos that you
 own or have permission to save. The extension talks only to a companion service
 on your computer; no third-party download API is used.
 
+### Key Features
+- **Direct 1-Click Downloads**: High-speed parallel fragment downloads up to 4K / 1080p video or 320 kbps MP3.
+- **YouTube Watch History & View Sync**: Automatically marks downloaded videos as watched on your YouTube account (via `--mark-watched` and session cookies) so playback and view stats register identically as if you visited YouTube.
+- **On-Page Native Integration**: Seamlessly embeds download actions into YouTube's toolbar, 3-dot dropdowns, and playlist queues.
+
 > You are responsible for following copyright law, the video's license, and
 > YouTube's terms. This project does not bypass DRM or access controls.
 

@@ -102,6 +102,33 @@
           <span class="muted" style="display: block; margin-top: 4px; font-weight: normal;">Downloads video & audio fragments across multiple parallel channels simultaneously.</span>
         </label>
 
+        <!-- YouTube Activity & Watch History Sync -->
+        <fieldset class="format-fieldset" style="margin-top: 16px;">
+          <legend>YouTube watch history & visit sync</legend>
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 500;">
+            <input id="markWatched" type="checkbox" checked style="accent-color: var(--accent); width: 16px; height: 16px;">
+            <span>Mark downloaded videos as watched on YouTube</span>
+          </label>
+          <span class="muted" style="display: block; margin-top: 5px; font-weight: normal; font-size: 11px;">
+            Sends playback confirmation to YouTube so downloads register view counts and appear in your watch history, exactly as if you visited YouTube.
+          </span>
+
+          <label class="field-label" for="cookiesBrowser" style="margin-top: 12px;">
+            Browser for YouTube session cookies
+            <select id="cookiesBrowser">
+              <option value="chrome" selected>Google Chrome</option>
+              <option value="brave">Brave</option>
+              <option value="edge">Microsoft Edge</option>
+              <option value="firefox">Mozilla Firefox</option>
+              <option value="safari">Apple Safari</option>
+              <option value="none">None (Anonymous view count without login session)</option>
+            </select>
+            <span class="muted" style="display: block; margin-top: 4px; font-weight: normal; font-size: 11px;">
+              Imports your YouTube login session so watch history is tied to your account. Automatically falls back if cookies are locked or unavailable.
+            </span>
+          </label>
+        </fieldset>
+
         <!-- Service Port -->
         <label class="field-label" for="port" style="margin-top: 16px;">
           Local service port

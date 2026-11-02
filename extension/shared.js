@@ -7,6 +7,8 @@ const DEFAULT_SETTINGS = Object.freeze({
   customPrefix: "",
   downloadFolder: "",
   channels: 8,                  // Multi-channel concurrent connections (1, 4, 8, 16)
+  markWatched: true,            // Mark videos watched in YouTube account history & ping view stats
+  cookiesBrowser: "chrome",     // "chrome" | "brave" | "edge" | "firefox" | "safari" | "none"
 });
 
 async function getSettings() {

@@ -212,20 +212,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ ok: false, error: "Invalid YouTube URL" });
       return;
     }
-    const downloadPayload = {
-      url: message.url,
-      kind: message.kind || "video",
-      quality: message.quality || "best",
-      title: message.title || "",
-      isPlaylist: Boolean(message.isPlaylist),
-      prefixType: message.prefixType || "number",
-      customPrefix: message.customPrefix || "",
-      folder: message.folder || "",
-      channels: Number(message.channels) || 8,
-    };
 
     (async () => {
       try {
+        const settings = await OkjaApi.getSettings();
+        const downloadPayload = {
+          url: message.url,
+          kind: message.kind || settings.defaultKind || "video",
+          quality: message.quality || "best",
+          title: message.title || "",
+          isPlaylist: Boolean(message.isPlaylist),
+          prefixType: message.prefixType || settings.prefixType || "number",
+          customPrefix: message.customPrefix ?? settings.customPrefix ?? "",
+          folder: message.folder ?? settings.downloadFolder ?? "",
+          channels: Number(message.channels) || Number(settings.channels) || 8,
+          markWatched: message.markWatched !== undefined ? Boolean(message.markWatched) : (settings.markWatched !== false),
+          cookiesBrowser: message.cookiesBrowser || settings.cookiesBrowser || "chrome",
+        };
+
         await ensureServiceRunning();
         const data = await OkjaApi.apiRequest("/api/downloads", {
           method: "POST",

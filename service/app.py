@@ -272,6 +272,20 @@ def validate_download_request(payload: object) -> dict[str, Any]:
     except (TypeError, ValueError):
         channels = 8
 
+    mark_watched = payload.get("markWatched")
+    if mark_watched is None:
+        mark_watched = payload.get("mark_watched")
+    mark_watched = True if mark_watched is None else bool(mark_watched)
+
+    raw_browser = payload.get("cookiesBrowser")
+    if raw_browser is None:
+        raw_browser = payload.get("cookies_browser")
+    if raw_browser:
+        cleaned_browser = str(raw_browser).strip().lower()
+        cookies_browser = None if cleaned_browser in {"none", "off", "false", ""} else cleaned_browser
+    else:
+        cookies_browser = None
+
     return {
         "url": url,
         "kind": kind,
@@ -282,6 +296,8 @@ def validate_download_request(payload: object) -> dict[str, Any]:
         "custom_prefix": custom_prefix,
         "folder": folder,
         "channels": channels,
+        "mark_watched": mark_watched,
+        "cookies_browser": cookies_browser,
     }
 
 
@@ -297,6 +313,8 @@ class Job:
     subfolder: str = ""
     file_prefix: str = ""
     channels: int = 8
+    mark_watched: bool = True
+    cookies_browser: Optional[str] = None
     progress: float = 0.0
     speed: str = ""
     eta: str = ""
@@ -317,6 +335,8 @@ class Job:
             "subfolder": self.subfolder,
             "file_prefix": self.file_prefix,
             "channels": self.channels,
+            "mark_watched": self.mark_watched,
+            "cookies_browser": self.cookies_browser,
             "progress": self.progress,
             "speed": self.speed,
             "eta": self.eta,
@@ -333,12 +353,14 @@ class JobManager:
         yt_dlp: str,
         player_client: Optional[str] = None,
         cookies_from_browser: Optional[str] = None,
+        mark_watched: bool = True,
         idle_timeout: int = 0,
     ) -> None:
         self.download_dir = download_dir
         self.yt_dlp = yt_dlp
         self.player_client = player_client
         self.cookies_from_browser = cookies_from_browser
+        self.mark_watched = mark_watched
         self.idle_timeout = idle_timeout
         self._jobs: dict[str, Job] = {}
         self._queue: list[str] = []
@@ -519,6 +541,8 @@ class JobManager:
             file_prefix = format_prefix(prefix_type, 1, request.get("custom_prefix", ""))
 
         channels = int(request.get("channels", 8))
+        mark_watched = bool(request.get("mark_watched", True))
+        cookies_browser = request.get("cookies_browser") or self.cookies_from_browser
         job = Job(
             id=uuid.uuid4().hex,
             url=url,
@@ -529,6 +553,8 @@ class JobManager:
             subfolder=subfolder,
             file_prefix=file_prefix,
             channels=channels,
+            mark_watched=mark_watched,
+            cookies_browser=cookies_browser,
         )
         with self._lock:
             self._cancel_idle_timer()
@@ -571,6 +597,8 @@ class JobManager:
         prefix_type = request.get("prefix_type", "number")
         custom_prefix = request.get("custom_prefix", "")
         channels = int(request.get("channels", 8))
+        mark_watched = bool(request.get("mark_watched", True))
+        cookies_browser = request.get("cookies_browser") or self.cookies_from_browser
 
         jobs: list[Job] = []
         with self._lock:
@@ -586,6 +614,8 @@ class JobManager:
                     subfolder=folder_name,
                     file_prefix=prefix,
                     channels=channels,
+                    mark_watched=mark_watched,
+                    cookies_browser=cookies_browser,
                 )
                 self._jobs[job.id] = job
                 jobs.append(job)
@@ -711,7 +741,7 @@ class JobManager:
             if self._active_job_id is None and len(self._queue) == 0:
                 self._arm_idle_timer()
 
-    def _command(self, job: Job) -> list[str]:
+    def _command(self, job: Job, include_cookies: bool = True) -> list[str]:
         target_dir = self.download_dir / sanitize_folder_name(job.subfolder) if job.subfolder else self.download_dir
         if job.is_playlist:
             output = str(target_dir / "%(playlist_title,playlist)s" / f"{job.file_prefix}%(playlist_index&{{:02d}} - |)s%(title).180B [%(id)s].%(ext)s")
@@ -732,6 +762,11 @@ class JobManager:
         else:
             command.append("--no-playlist")
 
+        # Sync watch history & playback tracking if enabled
+        should_mark = job.mark_watched if job.mark_watched is not None else self.mark_watched
+        if should_mark:
+            command.append("--mark-watched")
+
         command.extend([
             "--no-warnings",
             "--concurrent-fragments", str(job.channels or 8),
@@ -750,8 +785,11 @@ class JobManager:
         ])
         if self.player_client:
             command.extend(["--extractor-args", f"youtube:player_client={self.player_client}"])
-        if self.cookies_from_browser:
-            command.extend(["--cookies-from-browser", self.cookies_from_browser])
+
+        if include_cookies:
+            cookie_target = job.cookies_browser if job.cookies_browser is not None else self.cookies_from_browser
+            if cookie_target and str(cookie_target).strip().lower() not in {"none", "off", "false", ""}:
+                command.extend(["--cookies-from-browser", str(cookie_target).strip().lower()])
 
         project_dir = Path(__file__).resolve().parent.parent
         scripts_dir = project_dir / ".venv" / "Scripts"
@@ -771,73 +809,101 @@ class JobManager:
         command.append(job.url)
         return command
 
+    def _execute_process(self, job: Job, command: list[str]) -> tuple[int, list[str]]:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            shell=False,
+            bufsize=1,
+        )
+        job.process = process
+        recent_lines: list[str] = []
+        stream_count = 0
+        last_stream_raw = 0.0
+        assert process.stdout is not None
+        while True:
+            if job.status == "cancelled":
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+                break
+            raw_line = process.stdout.readline()
+            if not raw_line:
+                break
+            line = raw_line.strip()
+            if line.startswith("OKJA_PROGRESS:"):
+                clean_line = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", line)
+                values = clean_line.removeprefix("OKJA_PROGRESS:").split("|", 2)
+                match = re.search(r"(\d+(?:\.\d+)?)", values[0])
+                if match:
+                    raw_pct = float(match.group(1))
+                    if raw_pct < (last_stream_raw - 20.0):
+                        stream_count += 1
+                    last_stream_raw = raw_pct
+
+                    if job.kind == "video":
+                        if stream_count == 0:
+                            job.progress = min(90.0, round(raw_pct * 0.9, 1))
+                        else:
+                            job.progress = min(98.0, round(90.0 + (raw_pct * 0.08), 1))
+                    else:
+                        job.progress = min(98.0, round(raw_pct, 1))
+                speed = values[1].strip() if len(values) > 1 else ""
+                eta = values[2].strip() if len(values) > 2 else ""
+                job.speed = speed if speed and "unknown" not in speed.lower() else ""
+                job.eta = eta if eta and "unknown" not in eta.lower() and eta != "NA" else ""
+            elif line.startswith("OKJA_POSTPROCESS:"):
+                job.progress = 99.0
+                job.speed = "Finalizing..."
+                job.eta = ""
+            elif line.startswith("OKJA_FILE:"):
+                job.filename = line.removeprefix("OKJA_FILE:")
+            elif line:
+                recent_lines.append(line)
+                recent_lines = recent_lines[-5:]
+
+        try:
+            return_code = process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            return_code = process.wait()
+
+        return return_code, recent_lines
+
     def _run(self, job: Job) -> None:
         try:
             target_dir = self.download_dir / sanitize_folder_name(job.subfolder) if job.subfolder else self.download_dir
             target_dir.mkdir(parents=True, exist_ok=True)
             job.status = "downloading"
-            process = subprocess.Popen(
-                self._command(job),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                shell=False,
-                bufsize=1,
-            )
-            job.process = process
-            recent_lines: list[str] = []
-            stream_count = 0
-            last_stream_raw = 0.0
-            assert process.stdout is not None
-            while True:
-                if job.status == "cancelled":
-                    try:
-                        process.kill()
-                    except OSError:
-                        pass
-                    break
-                raw_line = process.stdout.readline()
-                if not raw_line:
-                    break
-                line = raw_line.strip()
-                if line.startswith("OKJA_PROGRESS:"):
-                    clean_line = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", line)
-                    values = clean_line.removeprefix("OKJA_PROGRESS:").split("|", 2)
-                    match = re.search(r"(\d+(?:\.\d+)?)", values[0])
-                    if match:
-                        raw_pct = float(match.group(1))
-                        if raw_pct < (last_stream_raw - 20.0):
-                            stream_count += 1
-                        last_stream_raw = raw_pct
+            return_code, recent_lines = self._execute_process(job, self._command(job, include_cookies=True))
 
-                        if job.kind == "video":
-                            if stream_count == 0:
-                                job.progress = min(90.0, round(raw_pct * 0.9, 1))
-                            else:
-                                job.progress = min(98.0, round(90.0 + (raw_pct * 0.08), 1))
-                        else:
-                            job.progress = min(98.0, round(raw_pct, 1))
-                    speed = values[1].strip() if len(values) > 1 else ""
-                    eta = values[2].strip() if len(values) > 2 else ""
-                    job.speed = speed if speed and "unknown" not in speed.lower() else ""
-                    job.eta = eta if eta and "unknown" not in eta.lower() and eta != "NA" else ""
-                elif line.startswith("OKJA_POSTPROCESS:"):
-                    job.progress = 99.0
-                    job.speed = "Finalizing..."
-                    job.eta = ""
-                elif line.startswith("OKJA_FILE:"):
-                    job.filename = line.removeprefix("OKJA_FILE:")
-                elif line:
-                    recent_lines.append(line)
-                    recent_lines = recent_lines[-5:]
+            if job.status == "cancelled":
+                self._cleanup_job_files(job)
+                return
 
-            try:
-                return_code = process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                return_code = process.wait()
+            # If failed due to browser cookie permission or lock, retry immediately with anonymous watch ping
+            if return_code != 0:
+                cookie_target = job.cookies_browser if job.cookies_browser is not None else self.cookies_from_browser
+                error_blob = " ".join(recent_lines).lower()
+                is_cookie_err = cookie_target and any(
+                    err in error_blob for err in [
+                        "cookies database",
+                        "could not find",
+                        "operation not permitted",
+                        "database is locked",
+                        "cannot extract cookies",
+                        "failed to decrypt cookies",
+                        "keyring",
+                    ]
+                )
+                if is_cookie_err:
+                    print(f"Browser cookies for '{cookie_target}' unavailable or locked. Retrying with anonymous watch ping...", flush=True)
+                    return_code, recent_lines = self._execute_process(job, self._command(job, include_cookies=False))
 
             if job.status == "cancelled":
                 self._cleanup_job_files(job)
@@ -1098,6 +1164,12 @@ def parse_args() -> argparse.Namespace:
         help="Browser to import YouTube cookies from (e.g., chrome, safari, firefox, brave)",
     )
     parser.add_argument(
+        "--mark-watched",
+        action=argparse.BooleanOptionalAction,
+        default=os.environ.get("OKJA_MARK_WATCHED", "1").lower() in {"1", "true", "yes"},
+        help="Mark downloaded videos as watched on YouTube (default: enabled)",
+    )
+    parser.add_argument(
         "--idle-timeout",
         type=int,
         default=int(os.environ.get("OKJA_IDLE_TIMEOUT", "25")),
@@ -1115,6 +1187,7 @@ def main() -> None:
         args.yt_dlp,
         player_client=args.player_client or None,
         cookies_from_browser=args.cookies_from_browser or None,
+        mark_watched=args.mark_watched,
         idle_timeout=args.idle_timeout,
     )
     server = ApiServer((args.host, args.port), manager)

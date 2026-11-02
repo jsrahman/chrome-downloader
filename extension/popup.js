@@ -63,6 +63,7 @@ function supportedVideoUrl(rawUrl) {
     if (host === "youtu.be") return url.pathname.split("/").filter(Boolean)[0] || "";
     if (!["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com"].includes(host)) return "";
     if (url.pathname === "/watch") return url.searchParams.get("v") || "";
+    if (url.pathname === "/playlist") return url.searchParams.get("list") ? `playlist:${url.searchParams.get("list")}` : "";
     const match = url.pathname.match(/^\/(?:shorts|live|embed)\/([\w-]+)/);
     return match?.[1] || "";
   } catch (_error) {
@@ -198,16 +199,20 @@ async function startDownload() {
       ? (elements.audioQuality ? elements.audioQuality.value : "320")
       : (elements.quality ? elements.quality.value : "1080");
 
+    const isPlaylist = currentUrl.includes("/playlist") || Boolean(currentUrl.includes("list="));
     chrome.runtime.sendMessage({
       type: "start-download",
       url: currentUrl,
+      isPlaylist,
       kind,
       quality,
-      title: elements.videoTitle.textContent,
+      title: elements.videoTitle.textContent.replace(/^📁\s*/, ""),
       prefixType: elements.prefixType ? elements.prefixType.value : "number",
       customPrefix: elements.customPrefix ? elements.customPrefix.value.trim() : "",
       folder: elements.downloadFolder ? elements.downloadFolder.value.trim() : "",
       channels: settings.channels || 8,
+      markWatched: settings.markWatched !== false,
+      cookiesBrowser: settings.cookiesBrowser || "chrome",
     }, (res) => {
       elements.download.classList.remove("loading");
       if (chrome.runtime.lastError || !res?.ok) {
@@ -306,11 +311,18 @@ async function initialize() {
 
   if (videoId) {
     currentUrl = sourceUrl;
-    elements.videoTitle.textContent = tab?.title?.replace(/\s*-\s*YouTube\s*$/, "").trim() || "YouTube video";
-    elements.videoUrl.textContent = `youtube.com · ${videoId}`;
+    const isPlaylist = videoId.startsWith("playlist:") || sourceUrl.includes("/playlist");
+    const cleanTitle = (tab?.title || "")
+      .replace(/\s*-\s*YouTube Music\s*$/i, "")
+      .replace(/\s*-\s*YouTube\s*$/i, "")
+      .trim() || (isPlaylist ? "YouTube Playlist" : "YouTube Track");
+    elements.videoTitle.textContent = (isPlaylist ? "📁 " : "") + cleanTitle;
+    const cleanId = videoId.replace("playlist:", "Playlist ");
+    const hostLabel = sourceUrl.includes("music.youtube.com") ? "music.youtube.com" : "youtube.com";
+    elements.videoUrl.textContent = `${hostLabel} · ${cleanId}`;
   } else {
-    elements.videoTitle.textContent = "Open a YouTube video first";
-    elements.videoUrl.textContent = "Navigate to a video on YouTube to download.";
+    elements.videoTitle.textContent = "Open a YouTube video or music first";
+    elements.videoUrl.textContent = "Navigate to a video or music track on YouTube to download.";
   }
   updateDownloadButton(false);
 

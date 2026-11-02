@@ -83,6 +83,25 @@ class RequestValidationTests(unittest.TestCase):
             self.assertEqual(res["kind"], "audio")
             self.assertEqual(res["quality"], bitrate)
 
+    def test_accepts_mark_watched_and_cookies_browser(self):
+        req = {
+            **self.valid,
+            "markWatched": False,
+            "cookiesBrowser": "firefox",
+        }
+        res = validate_download_request(req)
+        self.assertFalse(res["mark_watched"])
+        self.assertEqual(res["cookies_browser"], "firefox")
+
+        req_none = {
+            **self.valid,
+            "markWatched": True,
+            "cookiesBrowser": "none",
+        }
+        res_none = validate_download_request(req_none)
+        self.assertTrue(res_none["mark_watched"])
+        self.assertIsNone(res_none["cookies_browser"])
+
     def test_rejects_invalid_audio_quality(self):
         req = {**self.valid, "kind": "audio", "quality": "9999"}
         with self.assertRaises(ValueError):
@@ -137,6 +156,46 @@ class CommandTests(unittest.TestCase):
         self.assertIn("youtube:player_client=android,web", command)
         self.assertIn("--cookies-from-browser", command)
         self.assertIn("chrome", command)
+
+    def test_command_supports_mark_watched_toggle(self):
+        manager = JobManager(Path("/tmp/okja-test"), "yt-dlp", mark_watched=True)
+        job_watched = Job(
+            id="w1",
+            url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            kind="video",
+            quality="1080",
+            mark_watched=True,
+        )
+        cmd_watched = manager._command(job_watched)
+        self.assertIn("--mark-watched", cmd_watched)
+
+        job_unwatched = Job(
+            id="w2",
+            url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            kind="video",
+            quality="1080",
+            mark_watched=False,
+        )
+        cmd_unwatched = manager._command(job_unwatched)
+        self.assertNotIn("--mark-watched", cmd_unwatched)
+
+    def test_command_job_level_cookies_browser(self):
+        manager = JobManager(Path("/tmp/okja-test"), "yt-dlp", cookies_from_browser="chrome")
+        job_firefox = Job(
+            id="f1",
+            url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            kind="video",
+            quality="1080",
+            cookies_browser="firefox",
+        )
+        cmd = manager._command(job_firefox)
+        self.assertIn("--cookies-from-browser", cmd)
+        self.assertIn("firefox", cmd)
+        self.assertNotIn("chrome", cmd)
+
+        # When cookies disabled for fallback
+        cmd_no_cookies = manager._command(job_firefox, include_cookies=False)
+        self.assertNotIn("--cookies-from-browser", cmd_no_cookies)
 
     def test_audio_command_requests_mp3(self):
         manager = JobManager(Path("/tmp/okja-test"), "yt-dlp")

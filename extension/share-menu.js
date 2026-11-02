@@ -79,6 +79,45 @@
     return path === "/watch" || path.startsWith("/shorts") || path.startsWith("/live");
   }
 
+  function isYTMusic() {
+    return window.location.hostname === "music.youtube.com";
+  }
+
+  function getYTMusicCurrentlyPlaying() {
+    const playerBar = document.querySelector("ytmusic-player-bar");
+    if (!playerBar) return null;
+
+    const titleEl = playerBar.querySelector(".title.ytmusic-player-bar, yt-formatted-string.title, .middle-controls a.yt-simple-endpoint");
+    const bylineEl = playerBar.querySelector(".byline.ytmusic-player-bar, yt-formatted-string.byline");
+    const linkEl = playerBar.querySelector(".middle-controls a[href*='watch?v='], a[href*='watch?v='], .thumbnail-image-wrapper[href*='watch?v=']");
+
+    let songUrl = linkEl ? linkEl.getAttribute("href") : "";
+    if (!songUrl && window.location.pathname.startsWith("/watch")) {
+      songUrl = window.location.href;
+    }
+    if (songUrl && !songUrl.startsWith("http")) {
+      songUrl = new URL(songUrl, window.location.origin).href;
+    }
+
+    const titleText = titleEl ? titleEl.textContent.trim() : "";
+    const bylineText = bylineEl ? bylineEl.textContent.trim() : "";
+    let fullTitle = titleText;
+    if (titleText && bylineText && !titleText.includes(bylineText)) {
+      fullTitle = `${titleText} - ${bylineText}`;
+    }
+    if (!fullTitle) {
+      fullTitle = document.title.replace(/\s*-\s*YouTube Music\s*$/i, "").replace(/\s*-\s*YouTube\s*$/i, "").trim();
+    }
+
+    if (!songUrl) return null;
+    return {
+      url: songUrl,
+      title: fullTitle || "YouTube Music Track",
+      videoId: extractVideoId(songUrl),
+      timestamp: Date.now(),
+    };
+  }
+
   // Minimal Clean Alert Configurations (Bottom-Left)
   const ALERT_CONFIGS = {
     start: {
@@ -252,6 +291,7 @@
 
   function updateAllElements() {
     updateToolbarButtonState();
+    updateYTMusicPlayerBarButtonState();
     addDropdownMenuItems();
   }
 
@@ -322,6 +362,8 @@
         customPrefix: settings.customPrefix || "",
         folder: settings.downloadFolder || "",
         channels: settings.channels || 8,
+        markWatched: settings.markWatched !== false,
+        cookiesBrowser: settings.cookiesBrowser || "chrome",
       }, (res) => {
         if (triggerBtn) {
           setButtonLoading(triggerBtn, false);
@@ -386,6 +428,8 @@
         customPrefix: settings.customPrefix || "",
         folder: settings.downloadFolder || "",
         channels: settings.channels || 8,
+        markWatched: settings.markWatched !== false,
+        cookiesBrowser: settings.cookiesBrowser || "chrome",
       }, (res) => {
         if (chrome.runtime.lastError || !res?.ok) {
           const err = res?.error || chrome.runtime.lastError?.message || "Local service unavailable.";
@@ -534,6 +578,209 @@
     updateToolbarButtonState();
   }
 
+  // --- YouTube Music Player Bar & List Integration ---
+
+  const MUSIC_PLAYER_BTN_ID = "okja-music-player-download";
+  const MUSIC_ITEM_BTN_CLASS = "okja-music-item-btn";
+  const MUSIC_HEADER_BTN_ID = "okja-music-header-download";
+
+  function createYTMusicPlayerBarButton() {
+    const container = document.createElement("div");
+    container.id = MUSIC_PLAYER_BTN_ID;
+    container.className = "style-scope ytmusic-player-bar okja-music-player-item";
+
+    container.innerHTML = `
+      <button type="button" class="okja-music-bar-btn" title="Download currently playing music with Okja Saver" aria-label="Download with Okja Saver">
+        <span class="okja-btn-icon-wrapper">
+          ${DOWNLOAD_ICON_SVG}
+        </span>
+        <span class="okja-btn-text">Download</span>
+      </button>
+    `;
+
+    const btn = container.querySelector(".okja-music-bar-btn");
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const current = getYTMusicCurrentlyPlaying();
+      if (!current || !current.url) {
+        showAlert("error", "No active track detected in YouTube Music player.", "Track Not Found");
+        return;
+      }
+      downloadVideoWithPreferences(current.url, current.title, btn);
+    });
+
+    btn.addEventListener("pointerdown", (e) => e.stopPropagation());
+    return container;
+  }
+
+  function updateYTMusicPlayerBarButtonState() {
+    const btn = document.querySelector(`#${MUSIC_PLAYER_BTN_ID} .okja-music-bar-btn`);
+    if (!btn) return;
+
+    const iconSpan = btn.querySelector(".okja-btn-icon-wrapper");
+    const textSpan = btn.querySelector(".okja-btn-text");
+    const hasActive = Boolean(currentStatus.activeJob && ["downloading", "queued"].includes(currentStatus.activeJob.status));
+
+    if (iconSpan) {
+      iconSpan.innerHTML = hasActive ? USER_QUEUE_ICON_SVG : DOWNLOAD_ICON_SVG;
+    }
+    if (textSpan) {
+      textSpan.textContent = hasActive ? "Queue" : "Download";
+    }
+    const titleText = hasActive
+      ? "Active download in progress. Click to add currently playing track to queue."
+      : "Download currently playing track with Okja Saver";
+    btn.title = titleText;
+    btn.setAttribute("aria-label", titleText);
+  }
+
+  function addYTMusicPlayerBarButton() {
+    if (!isYTMusic()) return;
+
+    const playerBar = document.querySelector("ytmusic-player-bar");
+    if (!playerBar) return;
+
+    const existing = document.getElementById(MUSIC_PLAYER_BTN_ID);
+    if (existing && existing.isConnected) {
+      updateYTMusicPlayerBarButtonState();
+      return;
+    }
+    if (existing) existing.remove();
+
+    const middleControls = playerBar.querySelector(".middle-controls");
+    const menu = middleControls?.querySelector(".menu, ytmusic-menu-renderer") || playerBar.querySelector(".menu, ytmusic-menu-renderer");
+    const btn = createYTMusicPlayerBarButton();
+
+    if (menu && menu.parentElement) {
+      menu.parentElement.insertBefore(btn, menu);
+    } else if (middleControls) {
+      middleControls.appendChild(btn);
+    } else {
+      playerBar.appendChild(btn);
+    }
+    updateYTMusicPlayerBarButtonState();
+  }
+
+  function addYTMusicTrackButtons() {
+    if (!isYTMusic()) return;
+
+    const items = document.querySelectorAll(
+      "ytmusic-responsive-list-item-renderer, ytmusic-player-queue-item"
+    );
+    if (!items || items.length === 0) return;
+
+    for (const item of items) {
+      if (item.querySelector(`.${MUSIC_ITEM_BTN_CLASS}`)) {
+        continue;
+      }
+
+      const menuRenderer = item.querySelector("#menu ytmusic-menu-renderer, ytmusic-menu-renderer, #menu");
+      if (!menuRenderer) continue;
+
+      const linkEl = item.querySelector(
+        'a[href*="watch?v="], a[href*="/watch?v="], a[href*="watch?"], .flex-columns a, a#thumbnail'
+      );
+      const rawHref = linkEl ? linkEl.getAttribute("href") : "";
+      const videoId = extractVideoId(rawHref);
+      if (!videoId && !rawHref) continue;
+
+      const trackUrl = videoId
+        ? `https://music.youtube.com/watch?v=${videoId}`
+        : new URL(rawHref, window.location.origin).href;
+
+      const titleEl = item.querySelector(
+        '.title-column yt-formatted-string, .title.ytmusic-responsive-list-item-renderer, ' +
+        'yt-formatted-string.song-title, yt-formatted-string[title], a[href*="watch?v="]'
+      );
+      const bylineEl = item.querySelector(
+        '.secondary-flex-columns yt-formatted-string, .subtitle.ytmusic-responsive-list-item-renderer, ' +
+        'yt-formatted-string.byline, .byline'
+      );
+
+      const baseTitle = titleEl ? (titleEl.getAttribute("title") || titleEl.textContent || "").trim() : "Music Track";
+      const byline = bylineEl ? bylineEl.textContent.trim() : "";
+      const trackTitle = byline && !baseTitle.includes(byline) ? `${baseTitle} - ${byline}` : baseTitle;
+
+      const container = document.createElement("div");
+      container.className = `okja-music-item-download-wrapper ${MUSIC_ITEM_BTN_CLASS}`;
+      container.innerHTML = `
+        <button type="button" class="okja-music-item-download-btn" title="Download '${trackTitle.replace(/"/g, '&quot;')}' with Okja Saver" aria-label="Download '${trackTitle.replace(/"/g, '&quot;')}' with Okja Saver">
+          <span class="okja-btn-icon-wrapper">
+            ${DOWNLOAD_ICON_SVG}
+          </span>
+        </button>
+      `;
+
+      const btn = container.querySelector(".okja-music-item-download-btn");
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        downloadVideoWithPreferences(trackUrl, trackTitle, btn);
+      });
+      btn.addEventListener("pointerdown", (e) => {
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+      });
+
+      const dropdownTrigger = menuRenderer.querySelector("yt-icon-button#button, yt-icon-button, button");
+      if (dropdownTrigger && dropdownTrigger.parentElement === menuRenderer) {
+        menuRenderer.insertBefore(container, dropdownTrigger);
+      } else {
+        menuRenderer.appendChild(container);
+      }
+    }
+  }
+
+  function addYTMusicHeaderButton() {
+    if (!isYTMusic()) return;
+
+    const header = document.querySelector(
+      "ytmusic-responsive-header-renderer, ytmusic-detail-header-renderer"
+    );
+    if (!header) return;
+
+    if (header.querySelector(`#${MUSIC_HEADER_BTN_ID}`)) return;
+
+    const buttonsWrapper = header.querySelector(
+      ".buttons.ytmusic-detail-header-renderer, .buttons.ytmusic-responsive-header-renderer, " +
+      ".action-buttons, #top-level-buttons-computed, .buttons"
+    );
+    if (!buttonsWrapper) return;
+
+    const container = document.createElement("div");
+    container.id = MUSIC_HEADER_BTN_ID;
+    container.className = "okja-music-header-container";
+    container.innerHTML = `
+      <button type="button" class="okja-music-header-btn" title="Download album/playlist with Okja Saver" aria-label="Download album/playlist with Okja Saver">
+        <span class="okja-playlist-icon">
+          ${PLAYLIST_ICON_SVG}
+        </span>
+        <span class="okja-btn-text">Download Playlist</span>
+      </button>
+    `;
+
+    const btn = container.querySelector(".okja-music-header-btn");
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const titleEl = header.querySelector(".title, h1, yt-formatted-string.title");
+      const title = titleEl ? titleEl.textContent.trim() : document.title.replace(/\s*-\s*YouTube Music\s*$/, "").trim();
+
+      downloadPlaylistWithPreferences(window.location.href, title, btn);
+    });
+    btn.addEventListener("pointerdown", (e) => e.stopPropagation());
+
+    const menu = buttonsWrapper.querySelector("ytmusic-menu-renderer, #menu");
+    if (menu && menu.parentElement === buttonsWrapper) {
+      buttonsWrapper.insertBefore(container, menu);
+    } else {
+      buttonsWrapper.appendChild(container);
+    }
+  }
+
   // --- Playlist Panel Video Item Buttons (Inside Each Item's #menu) ---
 
   const PLAYLIST_ITEM_BTN_CLASS = "okja-playlist-item-btn";
@@ -636,6 +883,8 @@
         customPrefix: settings.customPrefix || "",
         folder: settings.downloadFolder || "",
         channels: settings.channels || 8,
+        markWatched: settings.markWatched !== false,
+        cookiesBrowser: settings.cookiesBrowser || "chrome",
       }, (res) => {
         if (triggerBtn) {
           setButtonLoading(triggerBtn, false);
@@ -753,6 +1002,9 @@
     "ytd-compact-radio-renderer",
     "ytd-radio-renderer",
     "ytd-reel-video-renderer",
+    "ytmusic-responsive-list-item-renderer",
+    "ytmusic-player-queue-item",
+    "ytmusic-two-row-item-renderer",
   ].join(", ");
 
   function extractVideoId(rawUrl) {
@@ -800,8 +1052,8 @@
   function isPopupOrDialogElement(target) {
     if (!target || !(target instanceof Element)) return false;
     return Boolean(target.closest(
-      "tp-yt-iron-dropdown, ytd-popup-container, ytd-menu-popup-renderer, " +
-      "yt-sheet-view-model, ytd-share-panel-renderer, ytd-unified-share-panel-renderer, " +
+      "tp-yt-iron-dropdown, ytd-popup-container, ytd-menu-popup-renderer, ytmusic-popup-container, ytmusic-menu-popup-renderer, " +
+      "yt-sheet-view-model, ytd-share-panel-renderer, ytd-unified-share-panel-renderer, ytmusic-unified-share-panel-renderer, " +
       "tp-yt-paper-dialog, [role='dialog'], [role='menu'], .okja-minimal-toast, .swal2-container"
     ));
   }
@@ -809,13 +1061,41 @@
   function isShareDialogElement(target) {
     if (!target || !(target instanceof Element)) return false;
     return Boolean(target.closest(
-      "ytd-share-panel-renderer, ytd-unified-share-panel-renderer, " +
+      "ytd-share-panel-renderer, ytd-unified-share-panel-renderer, ytmusic-unified-share-panel-renderer, " +
       "tp-yt-paper-dialog#share-dialog, #share-dialog, yt-share-panel-view-model"
     ));
   }
 
   function extractCardContext(card) {
     if (!card || !(card instanceof Element)) return null;
+
+    const isYTMusicItem = card.tagName.toLowerCase().startsWith("ytmusic-");
+    if (isYTMusicItem) {
+      const linkEl = card.querySelector(
+        'a[href*="watch?v="], a[href*="/watch?v="], a[href*="watch?"], ' +
+        'a[href*="playlist?list="], .flex-columns a, a#thumbnail, a'
+      );
+      const titleEl = card.querySelector(
+        '.title-column yt-formatted-string, .title.ytmusic-responsive-list-item-renderer, ' +
+        'yt-formatted-string.song-title, .title.ytmusic-two-row-item-renderer, ' +
+        'yt-formatted-string.title, [title], a[href*="watch?v="]'
+      );
+      const bylineEl = card.querySelector(
+        '.secondary-flex-columns yt-formatted-string, .subtitle.ytmusic-responsive-list-item-renderer, ' +
+        'yt-formatted-string.byline, .byline'
+      );
+
+      const rawHref = linkEl ? linkEl.getAttribute("href") : null;
+      const url = rawHref ? new URL(rawHref, window.location.origin).href : "";
+      const baseTitle = titleEl ? (titleEl.getAttribute("title") || titleEl.textContent || "").trim() : "";
+      const byline = bylineEl ? bylineEl.textContent.trim() : "";
+      const title = baseTitle ? (byline && !baseTitle.includes(byline) ? `${baseTitle} - ${byline}` : baseTitle) : "";
+      const videoId = extractVideoId(url);
+
+      if (url && (url.includes("/watch") || url.includes("playlist?list="))) {
+        return { url, title, videoId, isCard: true, timestamp: Date.now() };
+      }
+    }
 
     const linkEl = card.querySelector(
       'a#video-title-link, a#thumbnail, a[href*="/watch?v="], a[href*="/shorts/"], ' +
@@ -845,6 +1125,26 @@
       return null;
     }
 
+    // YouTube Music player bar trigger
+    const playerBar = target.closest("ytmusic-player-bar");
+    if (playerBar) {
+      const playing = getYTMusicCurrentlyPlaying();
+      if (playing) return playing;
+    }
+
+    // YouTube Music playlist / album header trigger
+    const musicHeader = target.closest("ytmusic-responsive-header-renderer, ytmusic-detail-header-renderer");
+    if (musicHeader) {
+      const titleEl = musicHeader.querySelector(".title, h1, yt-formatted-string.title");
+      const title = titleEl ? titleEl.textContent.trim() : document.title.replace(/\s*-\s*YouTube Music\s*$/, "").trim();
+      return {
+        url: window.location.href,
+        title: title || "YouTube Music Playlist",
+        isPlaylist: true,
+        timestamp: Date.now(),
+      };
+    }
+
     const card = target.closest(CARD_SELECTORS);
     if (card) {
       return extractCardContext(card);
@@ -867,7 +1167,7 @@
   }
 
   function resolveContextForDropdown(menuElement) {
-    const dropdown = menuElement ? menuElement.closest("tp-yt-iron-dropdown, ytd-popup-container") : null;
+    const dropdown = menuElement ? menuElement.closest("tp-yt-iron-dropdown, ytd-popup-container, ytmusic-popup-container") : null;
     if (dropdown) {
       const trigger = dropdown.positionTarget || dropdown.sizingTarget || dropdown._positionTarget;
       if (trigger) {
@@ -878,6 +1178,11 @@
 
     if (lastContextVideo && (Date.now() - lastContextVideo.timestamp < 120000) && lastContextVideo.url) {
       return lastContextVideo;
+    }
+
+    if (isYTMusic()) {
+      const currentTrack = getYTMusicCurrentlyPlaying();
+      if (currentTrack) return currentTrack;
     }
 
     if (isVideoWatchPage()) {
@@ -1025,13 +1330,51 @@
     return item;
   }
 
+  function createYTMusicDropdownItem(hasActive, menu) {
+    const item = document.createElement("ytmusic-menu-service-item-renderer");
+    item.className = "style-scope ytmusic-menu-popup-renderer okja-context-item";
+    item.setAttribute("role", "menuitem");
+    item.setAttribute("tabindex", "-1");
+
+    const iconSvg = hasActive ? USER_QUEUE_ICON_SVG : MENU_DOWNLOAD_ICON_SVG;
+    const labelText = hasActive ? "Add to queue" : "Download";
+    const stateAttr = hasActive ? "queue" : "download";
+
+    item.innerHTML = `
+      <tp-yt-paper-item class="style-scope ytmusic-menu-service-item-renderer" role="option">
+        <div class="style-scope ytmusic-menu-service-item-renderer okja-dropdown-icon" data-icon-state="${stateAttr}" style="margin-right: 16px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; fill: currentColor; color: inherit;">
+          ${iconSvg}
+        </div>
+        <yt-formatted-string class="style-scope ytmusic-menu-service-item-renderer text okja-dropdown-title">${labelText}</yt-formatted-string>
+      </tp-yt-paper-item>
+    `;
+
+    item.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const context = resolveContextForDropdown(menu);
+      const targetUrl = context?.url || window.location.href;
+      const targetTitle = context?.title || document.title.replace(/\s*-\s*YouTube Music\s*$/, "").replace(/\s*-\s*YouTube\s*$/, "").trim();
+
+      closeOpenDropdowns();
+      downloadVideoWithPreferences(targetUrl, targetTitle);
+    });
+
+    item.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+    });
+
+    return item;
+  }
+
   // Hook and enhance native YouTube "Add to queue" items in the dropdown menu
   function enhanceNativeQueueItems(menu) {
-    const items = menu.querySelectorAll("yt-list-item-view-model, ytd-menu-service-item-renderer");
+    const items = menu.querySelectorAll("yt-list-item-view-model, ytd-menu-service-item-renderer, ytmusic-menu-service-item-renderer, ytmusic-menu-navigation-item-renderer");
     items.forEach((item) => {
       if (item.classList.contains("okja-context-item")) return;
       const text = (item.textContent || "").trim();
-      if (text.toLowerCase() === "add to queue" || text.toLowerCase().startsWith("add to queue")) {
+      if (text.toLowerCase() === "add to queue" || text.toLowerCase().startsWith("add to queue") || text.toLowerCase() === "play next") {
         item.classList.add("okja-native-queue-item");
 
         const iconContainer = item.querySelector(".ytSpecIconShapeHost div, .ytIconWrapperHost, yt-icon");
@@ -1099,6 +1442,27 @@
       }
 
       const item = createPaperDropdownItem(hasActive, menu);
+      menu.appendChild(item);
+    });
+
+    // 3. YouTube Music Popup Menus
+    const ytmusicMenus = document.querySelectorAll(
+      "ytmusic-menu-popup-renderer tp-yt-paper-listbox, " +
+      "ytmusic-menu-popup-renderer #items, " +
+      "ytmusic-popup-container tp-yt-paper-listbox, " +
+      "tp-yt-iron-dropdown ytmusic-menu-popup-renderer tp-yt-paper-listbox"
+    );
+
+    ytmusicMenus.forEach((menu) => {
+      enhanceNativeQueueItems(menu);
+
+      const existing = menu.querySelector(".okja-context-item");
+      if (existing) {
+        updateSingleDropdownItem(existing, hasActive);
+        return;
+      }
+
+      const item = createYTMusicDropdownItem(hasActive, menu);
       menu.appendChild(item);
     });
   }
@@ -1320,9 +1684,15 @@
       } else if (lastContextVideo?.url) {
         foundUrl = lastContextVideo.url;
         foundTitle = foundTitle || lastContextVideo.title;
+      } else if (isYTMusic()) {
+        const current = getYTMusicCurrentlyPlaying();
+        if (current) {
+          foundUrl = current.url;
+          foundTitle = foundTitle || current.title;
+        }
       } else if (isVideoWatchPage()) {
         foundUrl = window.location.href;
-        foundTitle = foundTitle || document.title.replace(/\s*-\s*YouTube\s*$/, "").trim();
+        foundTitle = foundTitle || document.title.replace(/\s*-\s*YouTube Music\s*$/i, "").replace(/\s*-\s*YouTube\s*$/i, "").trim();
       }
     }
 
@@ -1360,6 +1730,7 @@
       "ytd-share-panel-renderer #share-dialog, " +
       "tp-yt-paper-dialog#share-dialog, " +
       "ytd-unified-share-panel-renderer, " +
+      "ytmusic-unified-share-panel-renderer, " +
       "ytd-share-panel-renderer, " +
       "yt-share-panel-view-model, " +
       "tp-yt-paper-dialog[role='dialog']"
@@ -1367,7 +1738,7 @@
 
     const dialog = [...dialogs].find((d) => isVisible(d) && (
       d.id === "share-dialog" ||
-      d.querySelector("#share-url, ytd-share-target-renderer, ytd-copy-link-renderer, #share-buttons")
+      d.querySelector("#share-url, ytd-share-target-renderer, ytd-copy-link-renderer, #share-buttons, ytmusic-unified-share-panel-renderer")
     ));
 
     if (!dialog || dialog.querySelector(`#${SHARE_ACTION_ID}`)) return;
@@ -1387,7 +1758,7 @@
 
       const context = resolveShareDialogContext(dialog);
       const targetUrl = context.url || window.location.href;
-      const targetTitle = context.title || document.title.replace(/\s*-\s*YouTube\s*$/, "").trim();
+      const targetTitle = context.title || document.title.replace(/\s*-\s*YouTube Music\s*$/, "").replace(/\s*-\s*YouTube\s*$/, "").trim();
 
       closeShareDialog(dialog);
       downloadVideoWithPreferences(targetUrl, targetTitle, shareBtn);
@@ -1406,6 +1777,9 @@
     window.requestAnimationFrame(() => {
       scheduled = false;
       addToolbarButton();
+      addYTMusicPlayerBarButton();
+      addYTMusicTrackButtons();
+      addYTMusicHeaderButton();
       addPlaylistHeaderButton();
       addPlaylistPanelVideoButtons();
       addShareAction();
@@ -1415,9 +1789,9 @@
 
   // Intercept clicks on 3-dot dropdown items ("Add to queue", "Share") and direct Share buttons
   document.addEventListener("click", (e) => {
-    const item = e.target.closest("yt-list-item-view-model, ytd-menu-service-item-renderer");
+    const item = e.target.closest("yt-list-item-view-model, ytd-menu-service-item-renderer, ytmusic-menu-service-item-renderer, ytmusic-menu-navigation-item-renderer");
     if (item) {
-      const dropdown = item.closest("#contentWrapper, tp-yt-iron-dropdown, yt-sheet-view-model, ytd-popup-container, ytd-menu-popup-renderer");
+      const dropdown = item.closest("#contentWrapper, tp-yt-iron-dropdown, yt-sheet-view-model, ytd-popup-container, ytd-menu-popup-renderer, ytmusic-popup-container, ytmusic-menu-popup-renderer");
       if (dropdown) {
         const text = (item.textContent || "").trim().toLowerCase();
         if (text.includes("share")) {
@@ -1426,14 +1800,14 @@
             lastSharedVideoContext = { ...context, timestamp: Date.now() };
             lastContextVideo = { ...context, timestamp: Date.now() };
           }
-        } else if (text === "add to queue" || text.startsWith("add to queue")) {
+        } else if (text === "add to queue" || text.startsWith("add to queue") || text === "play next") {
           e.preventDefault();
           e.stopPropagation();
           e.stopImmediatePropagation();
 
           const context = resolveContextForDropdown(item);
           const targetUrl = context?.url || window.location.href;
-          const targetTitle = context?.title || document.title.replace(/\s*-\s*YouTube\s*$/, "").trim();
+          const targetTitle = context?.title || document.title.replace(/\s*-\s*YouTube Music\s*$/, "").replace(/\s*-\s*YouTube\s*$/, "").trim();
 
           closeOpenDropdowns();
           queueVideoWithPreferences(targetUrl, targetTitle);
@@ -1444,7 +1818,7 @@
 
     // Direct Share button on a video card or player toolbar
     const shareTrigger = e.target.closest(
-      "button[aria-label*='Share' i], [title*='Share' i], ytd-share-target-renderer, #share-button"
+      "button[aria-label*='Share' i], [title*='Share' i], ytd-share-target-renderer, #share-button, ytmusic-menu-navigation-item-renderer"
     );
     if (shareTrigger && !isShareDialogElement(shareTrigger)) {
       const card = shareTrigger.closest(CARD_SELECTORS);
@@ -1453,6 +1827,12 @@
         if (cardCtx && cardCtx.url) {
           lastSharedVideoContext = { ...cardCtx, timestamp: Date.now() };
           lastContextVideo = { ...cardCtx, timestamp: Date.now() };
+        }
+      } else if (isYTMusic()) {
+        const currentTrack = getYTMusicCurrentlyPlaying();
+        if (currentTrack) {
+          lastSharedVideoContext = { ...currentTrack, timestamp: Date.now() };
+          lastContextVideo = { ...currentTrack, timestamp: Date.now() };
         }
       } else if (isVideoWatchPage()) {
         const isMainPlayerShare = Boolean(shareTrigger.closest("ytd-watch-metadata, #top-level-buttons-computed, #actions"));
