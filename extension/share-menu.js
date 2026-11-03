@@ -62,11 +62,58 @@
     }
   }
 
+  const DEFAULT_SETTINGS = Object.freeze({
+    port: 43117,
+    defaultKind: "video",
+    defaultQuality: "1080",
+    defaultAudioQuality: "320",
+    prefixType: "number",
+    customPrefix: "",
+    downloadFolder: "",
+    channels: 8,
+    markWatched: true,
+    cookiesBrowser: "chrome",
+  });
+
+  let currentSettings = { ...DEFAULT_SETTINGS };
+
+  function syncSettingsFromStorage() {
+    try {
+      chrome.storage?.local?.get(DEFAULT_SETTINGS, (stored) => {
+        if (stored) {
+          currentSettings = { ...DEFAULT_SETTINGS, ...stored };
+          updateAllElements();
+        }
+      });
+    } catch (_e) {}
+  }
+
+  try {
+    chrome.storage?.onChanged?.addListener((changes, area) => {
+      if (area === "local") {
+        let changed = false;
+        for (const [key, change] of Object.entries(changes)) {
+          if (key in currentSettings) {
+            currentSettings[key] = change.newValue;
+            changed = true;
+          }
+        }
+        if (changed) {
+          updateAllElements();
+          scheduleUpdate();
+        }
+      }
+    });
+  } catch (_e) {}
+
+  syncSettingsFromStorage();
+
   let currentStatus = { activeJob: null, queue: [], queueCount: 0 };
   let lastIconState = "";
   let lastActiveJob = null;
   let lastContextVideo = null;
   let lastSharedVideoContext = null;
+  let lastInitiatedDownload = { title: "", time: 0 };
 
   function isVisible(element) {
     if (!element) return false;
@@ -152,8 +199,18 @@
     },
   };
 
-  let lastAlertHash = "";
-  let lastAlertTime = 0;
+  const recentAlerts = new Map();
+
+  function normalizeAlertKey(type, title, text) {
+    const cleanText = (text || "")
+      .replace(/\s*\([^)]*\)/g, "")
+      .replace(/\s*(saved to downloads|saved to download folder|saved|download started|added to queue)\.?/gi, "")
+      .replace(/[^\w\s]/g, "")
+      .trim()
+      .toLowerCase();
+    const cleanTitle = (title || "").replace(/[^\w\s]/g, "").trim().toLowerCase();
+    return `${type}:${cleanTitle}:${cleanText}`;
+  }
 
   function getToastContainer() {
     let container = document.getElementById("okja-toast-container");
@@ -171,14 +228,18 @@
     const safeText = text ? String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
     const safeTitle = String(titleText).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-    // Debounce duplicate identical alerts within 800ms
-    const alertHash = `${type}:${safeTitle}:${safeText}`;
+    // Robust deduplication within 2500ms
+    const alertKey = normalizeAlertKey(type, safeTitle, text);
     const now = Date.now();
-    if (alertHash === lastAlertHash && (now - lastAlertTime) < 800) {
+    for (const [key, timestamp] of recentAlerts.entries()) {
+      if (now - timestamp > 6000) {
+        recentAlerts.delete(key);
+      }
+    }
+    if (recentAlerts.has(alertKey) && (now - recentAlerts.get(alertKey)) < 2500) {
       return;
     }
-    lastAlertHash = alertHash;
-    lastAlertTime = now;
+    recentAlerts.set(alertKey, now);
 
     const container = getToastContainer();
 
@@ -272,16 +333,8 @@
     try {
       chrome.runtime.sendMessage({ type: "get-status" }, (res) => {
         if (chrome.runtime.lastError || !res?.ok || !res?.data) return;
-        const previousActive = lastActiveJob;
         currentStatus = res.data;
         lastActiveJob = currentStatus.activeJob;
-
-        // Trigger completion toast if active job finished
-        if (previousActive && previousActive.status === "downloading" && (!currentStatus.activeJob || currentStatus.activeJob.id !== previousActive.id)) {
-          const fn = previousActive.filename ? previousActive.filename.split("/").pop() : "";
-          showAlert("complete", fn || (previousActive.title ? `"${previousActive.title}" saved to downloads.` : "Video saved to downloads folder."), undefined, 4500);
-        }
-
         updateAllElements();
       });
     } catch (_e) {
@@ -292,7 +345,22 @@
   function updateAllElements() {
     updateToolbarButtonState();
     updateYTMusicPlayerBarButtonState();
+    updatePlaylistPanelActionButtonsState();
     addDropdownMenuItems();
+  }
+
+  function updatePlaylistPanelActionButtonsState() {
+    const buttons = document.querySelectorAll(`.${PLAYLIST_PANEL_ACTION_BTN_CLASS}`);
+    if (!buttons || buttons.length === 0) return;
+
+    const isAudio = currentSettings.defaultKind === "audio";
+    const qual = isAudio ? `${currentSettings.defaultAudioQuality || "320"}k MP3` : `${currentSettings.defaultQuality || "1080"}p`;
+    const titleText = `Download playlist with Okja Saver (${qual})`;
+
+    buttons.forEach((btn) => {
+      btn.title = titleText;
+      btn.setAttribute("aria-label", titleText);
+    });
   }
 
   function updateToolbarButtonState() {
@@ -311,21 +379,16 @@
       }
     }
 
-    try {
-      chrome.storage?.local?.get({ defaultKind: "video", defaultQuality: "1080", defaultAudioQuality: "320" }, (settings) => {
-        if (!settings) return;
-        const isAudio = settings.defaultKind === "audio";
-        const qual = isAudio ? `${settings.defaultAudioQuality || "320"}k MP3` : `${settings.defaultQuality || "1080"}p`;
-        const titleText = hasActive
-          ? `Active download in progress. Click to add this video to queue (${qual}).`
-          : `Download with Okja Saver (${qual})`;
-        btn.title = titleText;
-        btn.setAttribute("aria-label", titleText);
-        if (textSpan) {
-          textSpan.textContent = hasActive ? "Queue" : (isAudio ? "Download MP3" : "Download");
-        }
-      });
-    } catch (_e) {}
+    const isAudio = currentSettings.defaultKind === "audio";
+    const qual = isAudio ? `${currentSettings.defaultAudioQuality || "320"}k MP3` : `${currentSettings.defaultQuality || "1080"}p`;
+    const titleText = hasActive
+      ? `Active download in progress. Click to add this video to queue (${qual}).`
+      : `Download with Okja Saver (${qual})`;
+    btn.title = titleText;
+    btn.setAttribute("aria-label", titleText);
+    if (textSpan) {
+      textSpan.textContent = hasActive ? "Queue" : (isAudio ? "Download MP3" : "Download");
+    }
   }
 
   // Unified download function: starts immediately if idle, queues if busy
@@ -335,22 +398,14 @@
     }
 
     try {
-      const settings = await chrome.storage.local.get({
-        defaultKind: "video",
-        defaultQuality: "1080",
-        defaultAudioQuality: "320",
-        prefixType: "number",
-        customPrefix: "",
-        downloadFolder: "",
-        channels: 8,
-      });
-
       const targetUrl = url || window.location.href;
       const targetTitle = (title || document.title.replace(/\s*-\s*YouTube\s*$/, "")).trim();
-      const kind = settings.defaultKind || "video";
+      const kind = currentSettings.defaultKind || "video";
       const quality = kind === "audio"
-        ? (settings.defaultAudioQuality || "320")
-        : (settings.defaultQuality || "1080");
+        ? (currentSettings.defaultAudioQuality || "320")
+        : (currentSettings.defaultQuality || "1080");
+
+      lastInitiatedDownload = { title: targetTitle, time: Date.now() };
 
       chrome.runtime.sendMessage({
         type: "start-download",
@@ -358,12 +413,12 @@
         kind,
         quality,
         title: targetTitle,
-        prefixType: settings.prefixType || "number",
-        customPrefix: settings.customPrefix || "",
-        folder: settings.downloadFolder || "",
-        channels: settings.channels || 8,
-        markWatched: settings.markWatched !== false,
-        cookiesBrowser: settings.cookiesBrowser || "chrome",
+        prefixType: currentSettings.prefixType || "number",
+        customPrefix: currentSettings.customPrefix || "",
+        folder: currentSettings.downloadFolder || "",
+        channels: currentSettings.channels || 8,
+        markWatched: currentSettings.markWatched !== false,
+        cookiesBrowser: currentSettings.cookiesBrowser || "chrome",
       }, (res) => {
         if (triggerBtn) {
           setButtonLoading(triggerBtn, false);
@@ -401,22 +456,14 @@
   // Explicit queue action: sends to queue and displays Amber toast
   async function queueVideoWithPreferences(url, title) {
     try {
-      const settings = await chrome.storage.local.get({
-        defaultKind: "video",
-        defaultQuality: "1080",
-        defaultAudioQuality: "320",
-        prefixType: "number",
-        customPrefix: "",
-        downloadFolder: "",
-        channels: 8,
-      });
-
       const targetUrl = url || window.location.href;
       const targetTitle = (title || document.title.replace(/\s*-\s*YouTube\s*$/, "")).trim();
-      const kind = settings.defaultKind || "video";
+      const kind = currentSettings.defaultKind || "video";
       const quality = kind === "audio"
-        ? (settings.defaultAudioQuality || "320")
-        : (settings.defaultQuality || "1080");
+        ? (currentSettings.defaultAudioQuality || "320")
+        : (currentSettings.defaultQuality || "1080");
+
+      lastInitiatedDownload = { title: targetTitle, time: Date.now() };
 
       chrome.runtime.sendMessage({
         type: "start-download",
@@ -424,12 +471,12 @@
         kind,
         quality,
         title: targetTitle,
-        prefixType: settings.prefixType || "number",
-        customPrefix: settings.customPrefix || "",
-        folder: settings.downloadFolder || "",
-        channels: settings.channels || 8,
-        markWatched: settings.markWatched !== false,
-        cookiesBrowser: settings.cookiesBrowser || "chrome",
+        prefixType: currentSettings.prefixType || "number",
+        customPrefix: currentSettings.customPrefix || "",
+        folder: currentSettings.downloadFolder || "",
+        channels: currentSettings.channels || 8,
+        markWatched: currentSettings.markWatched !== false,
+        cookiesBrowser: currentSettings.cookiesBrowser || "chrome",
       }, (res) => {
         if (chrome.runtime.lastError || !res?.ok) {
           const err = res?.error || chrome.runtime.lastError?.message || "Local service unavailable.";
@@ -625,12 +672,14 @@
     if (iconSpan) {
       iconSpan.innerHTML = hasActive ? USER_QUEUE_ICON_SVG : DOWNLOAD_ICON_SVG;
     }
+    const isAudio = currentSettings.defaultKind === "audio";
+    const qual = isAudio ? `${currentSettings.defaultAudioQuality || "320"}k MP3` : `${currentSettings.defaultQuality || "1080"}p`;
     if (textSpan) {
-      textSpan.textContent = hasActive ? "Queue" : "Download";
+      textSpan.textContent = hasActive ? "Queue" : (isAudio ? "Download MP3" : "Download");
     }
     const titleText = hasActive
-      ? "Active download in progress. Click to add currently playing track to queue."
-      : "Download currently playing track with Okja Saver";
+      ? `Active download in progress. Click to add currently playing track to queue (${qual}).`
+      : `Download currently playing track with Okja Saver (${qual})`;
     btn.title = titleText;
     btn.setAttribute("aria-label", titleText);
   }
@@ -849,28 +898,20 @@
 
   // --- Playlist Page Header Button ---
 
-  async function downloadPlaylistWithPreferences(url, title, triggerBtn) {
+  async function downloadPlaylistWithPreferences(url, title, triggerBtn, items = []) {
     if (triggerBtn) {
       setButtonLoading(triggerBtn, true, "Starting...");
     }
 
     try {
-      const settings = await chrome.storage.local.get({
-        defaultKind: "video",
-        defaultQuality: "1080",
-        defaultAudioQuality: "320",
-        prefixType: "number",
-        customPrefix: "",
-        downloadFolder: "",
-        channels: 8,
-      });
-
       const targetUrl = url || window.location.href;
       const targetTitle = (title || document.title.replace(/\s*-\s*YouTube\s*$/, "")).trim();
-      const kind = settings.defaultKind || "video";
+      const kind = currentSettings.defaultKind || "video";
       const quality = kind === "audio"
-        ? (settings.defaultAudioQuality || "320")
-        : (settings.defaultQuality || "1080");
+        ? (currentSettings.defaultAudioQuality || "320")
+        : (currentSettings.defaultQuality || "1080");
+
+      lastInitiatedDownload = { title: targetTitle, time: Date.now() };
 
       chrome.runtime.sendMessage({
         type: "start-download",
@@ -879,12 +920,13 @@
         quality,
         title: targetTitle ? `Playlist: ${targetTitle}` : "Playlist",
         isPlaylist: true,
-        prefixType: settings.prefixType || "number",
-        customPrefix: settings.customPrefix || "",
-        folder: settings.downloadFolder || "",
-        channels: settings.channels || 8,
-        markWatched: settings.markWatched !== false,
-        cookiesBrowser: settings.cookiesBrowser || "chrome",
+        items: Array.isArray(items) ? items : [],
+        prefixType: currentSettings.prefixType || "number",
+        customPrefix: currentSettings.customPrefix || "",
+        folder: currentSettings.downloadFolder || "",
+        channels: currentSettings.channels || 8,
+        markWatched: currentSettings.markWatched !== false,
+        cookiesBrowser: currentSettings.cookiesBrowser || "chrome",
       }, (res) => {
         if (triggerBtn) {
           setButtonLoading(triggerBtn, false);
@@ -967,7 +1009,29 @@
       );
       const title = titleEl ? titleEl.textContent.trim() : document.title.replace(/\s*-\s*YouTube\s*$/, "").trim();
 
-      downloadPlaylistWithPreferences(window.location.href, title, btn);
+      const items = [];
+      const itemElements = document.querySelectorAll("ytd-playlist-video-renderer, ytmusic-responsive-list-item-renderer");
+      for (const itemEl of itemElements) {
+        const link = itemEl.querySelector("a#video-title, a#thumbnail, a[href*='watch?v=']");
+        const tEl = itemEl.querySelector("#video-title, span[title], yt-formatted-string.title");
+        if (link) {
+          const rawHref = link.getAttribute("href") || "";
+          try {
+            const u = new URL(rawHref, window.location.origin);
+            const vId = u.searchParams.get("v");
+            if (vId) {
+              const vidTitle = (tEl ? (tEl.getAttribute("title") || tEl.textContent) : "").trim() || "YouTube video";
+              items.push({
+                id: vId,
+                title: vidTitle,
+                url: `https://www.youtube.com/watch?v=${vId}`,
+              });
+            }
+          } catch (_e) {}
+        }
+      }
+
+      downloadPlaylistWithPreferences(window.location.href, title, btn, items);
     });
 
     btn.addEventListener("pointerdown", (e) => e.stopPropagation());
@@ -981,6 +1045,146 @@
       wrapper.insertBefore(container, menuRenderer);
     } else {
       wrapper.appendChild(container);
+    }
+  }
+
+  // --- Playlist Actions Bar Download Button (Next to Loop & Shuffle in Watch Page Playlist Panel) ---
+
+  const PLAYLIST_PANEL_ACTION_CLASS = "okja-playlist-panel-action-wrapper";
+  const PLAYLIST_PANEL_ACTION_BTN_CLASS = "okja-playlist-panel-action-btn";
+
+  function resolvePlaylistPanelContext(panel) {
+    let listId = "";
+    try {
+      const currentUrl = new URL(window.location.href);
+      listId = currentUrl.searchParams.get("list") || "";
+    } catch (_e) {}
+
+    if (!listId && panel) {
+      const linkWithList = panel.querySelector('a[href*="list="]');
+      if (linkWithList) {
+        try {
+          const u = new URL(linkWithList.getAttribute("href"), window.location.origin);
+          listId = u.searchParams.get("list") || "";
+        } catch (_e) {}
+      }
+    }
+
+    let title = "";
+    if (panel) {
+      const titleEl = panel.querySelector(
+        "#header-description a, .header-title a, .title a, #header-contents h3, yt-formatted-string.title, .header .title, yt-formatted-string[title]"
+      );
+      if (titleEl) {
+        title = (titleEl.getAttribute("title") || titleEl.textContent || "").trim();
+      }
+    }
+    if (!title) {
+      title = document.title.replace(/\s*-\s*YouTube\s*$/, "").trim();
+    }
+
+    // YouTube Mixes (RD...), Liked Videos (LL), Watch Later (WL) fail on /playlist?list=...
+    // They must use the watch URL with ?list=...
+    let playlistUrl = window.location.href;
+    if (listId) {
+      if (listId.startsWith("RD") || listId === "WL" || listId === "LL" || listId === "LM") {
+        playlistUrl = window.location.href;
+      } else if (window.location.pathname === "/watch") {
+        playlistUrl = window.location.href;
+      } else {
+        playlistUrl = `https://www.youtube.com/playlist?list=${listId}`;
+      }
+    }
+
+    // Extract items directly from the panel DOM
+    const items = [];
+    if (panel) {
+      const videoRenderers = panel.querySelectorAll("ytd-playlist-panel-video-renderer, ytmusic-player-queue-item");
+      for (const itemEl of videoRenderers) {
+        const link = itemEl.querySelector("a#wc-endpoint, a#thumbnail, a.yt-simple-endpoint, a[href*='watch?v=']");
+        const titleEl = itemEl.querySelector("#video-title, span[title], #meta #video-title, yt-formatted-string.title");
+        if (link) {
+          const rawHref = link.getAttribute("href") || "";
+          try {
+            const u = new URL(rawHref, window.location.origin);
+            const vId = u.searchParams.get("v");
+            if (vId) {
+              const vidTitle = (titleEl ? (titleEl.getAttribute("title") || titleEl.textContent) : "").trim() || "YouTube video";
+              items.push({
+                id: vId,
+                title: vidTitle,
+                url: `https://www.youtube.com/watch?v=${vId}`,
+              });
+            }
+          } catch (_e) {}
+        }
+      }
+    }
+
+    return { url: playlistUrl, title: title || "Playlist", listId, items };
+  }
+
+  function addPlaylistPanelActionButton() {
+    const panels = document.querySelectorAll("ytd-playlist-panel-renderer");
+    if (!panels || panels.length === 0) return;
+
+    for (const panel of panels) {
+      if (panel.querySelector(`.${PLAYLIST_PANEL_ACTION_CLASS}`)) {
+        continue;
+      }
+
+      // Target the actions bar menu
+      const topButtons = panel.querySelector(
+        "#playlist-actions #playlist-action-menu #top-level-buttons-computed, " +
+        "#playlist-action-menu #top-level-buttons-computed, " +
+        "#playlist-actions #start-actions #top-level-buttons-computed, " +
+        "#playlist-actions #top-level-buttons-computed, " +
+        "#start-actions #top-level-buttons-computed"
+      );
+      if (!topButtons) continue;
+
+      const container = document.createElement("div");
+      container.className = `style-scope ytd-menu-renderer ${PLAYLIST_PANEL_ACTION_CLASS}`;
+
+      const isAudio = currentSettings.defaultKind === "audio";
+      const qual = isAudio ? `${currentSettings.defaultAudioQuality || "320"}k MP3` : `${currentSettings.defaultQuality || "1080"}p`;
+      const titleText = `Download playlist with Okja Saver (${qual})`;
+
+      container.innerHTML = `
+        <button type="button" class="ytSpecButtonShapeNextHost ytSpecButtonShapeNextText ytSpecButtonShapeNextMono ytSpecButtonShapeNextSizeM ytSpecButtonShapeNextIconOnlyDefault ytSpecButtonShapeNextEnableBackdropFilterExperiment ytSpecButtonShapeNextMainstageIconSize ytSpecButtonShapeNextMainstagePadding ${PLAYLIST_PANEL_ACTION_BTN_CLASS}" title="${titleText}" aria-label="${titleText}">
+          <div aria-hidden="true" class="ytSpecButtonShapeNextIcon ytSpecButtonShapeNextElevatedContent">
+            <span class="ytIconWrapperHost okja-playlist-icon" style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">
+              <span class="yt-icon-shape ytSpecIconShapeHost" style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%;">
+                <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; fill: none; color: currentColor;">
+                  ${PLAYLIST_ICON_SVG}
+                </div>
+              </span>
+            </span>
+          </div>
+        </button>
+      `;
+
+      const btn = container.querySelector(`.${PLAYLIST_PANEL_ACTION_BTN_CLASS}`);
+      const clickHandler = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        const context = resolvePlaylistPanelContext(panel);
+        downloadPlaylistWithPreferences(context.url, context.title, btn, context.items);
+      };
+
+      btn.addEventListener("click", clickHandler);
+      btn.addEventListener("pointerdown", (e) => e.stopPropagation());
+      container.addEventListener("click", clickHandler);
+
+      // Place after Shuffle button if present, otherwise append
+      const shuffleBtn = topButtons.querySelector("ytd-toggle-button-renderer");
+      if (shuffleBtn && shuffleBtn.nextSibling) {
+        topButtons.insertBefore(container, shuffleBtn.nextSibling);
+      } else {
+        topButtons.appendChild(container);
+      }
     }
   }
 
@@ -1781,6 +1985,7 @@
       addYTMusicTrackButtons();
       addYTMusicHeaderButton();
       addPlaylistHeaderButton();
+      addPlaylistPanelActionButton();
       addPlaylistPanelVideoButtons();
       addShareAction();
       addDropdownMenuItems();
@@ -1872,18 +2077,31 @@
 
   // Listen for broadcast events from background script
   chrome.runtime.onMessage.addListener((message) => {
-    if (message?.type === "download-complete") {
-      showAlert("complete", message.filename || (message.title ? `"${message.title}" saved.` : "Video saved to downloads folder."), undefined, 4500);
+    if (message?.type === "settings-updated" && message.settings) {
+      currentSettings = { ...currentSettings, ...message.settings };
+      updateAllElements();
+      scheduleUpdate();
+    } else if (message?.type === "download-complete") {
+      if (!document.hidden) {
+        showAlert("complete", message.filename || (message.title ? `"${message.title}" saved.` : "Video saved to downloads folder."), undefined, 4500);
+      }
       fetchStatus();
     } else if (message?.type === "download-started") {
-      if (message.queued) {
-        showAlert("queue", message.title ? `"${message.title}" added to queue.` : "Video queued. Will download in sequence.", "Added to Queue");
-      } else {
-        showAlert("start", message.title ? `Saving "${message.title}"...` : "Download started.", "Download Started");
+      const isSelfInitiated = (Date.now() - lastInitiatedDownload.time < 3500) &&
+        (!message.title || !lastInitiatedDownload.title || message.title.includes(lastInitiatedDownload.title) || lastInitiatedDownload.title.includes(message.title));
+
+      if (!isSelfInitiated && !document.hidden) {
+        if (message.queued) {
+          showAlert("queue", message.title ? `"${message.title}" added to queue.` : "Video queued. Will download in sequence.", "Added to Queue");
+        } else {
+          showAlert("start", message.title ? `Saving "${message.title}"...` : "Download started.", "Download Started");
+        }
       }
       fetchStatus();
     } else if (message?.type === "download-cancelled") {
-      showAlert("cancelled", "Download was cancelled.", "Download Cancelled");
+      if (!document.hidden) {
+        showAlert("cancelled", "Download was cancelled.", "Download Cancelled");
+      }
       fetchStatus();
     }
   });

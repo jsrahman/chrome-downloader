@@ -23,10 +23,12 @@ from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 
 
-MAX_REQUEST_BYTES = 16 * 1024
+MAX_REQUEST_BYTES = 2 * 1024 * 1024
 EXTENSION_ORIGIN = re.compile(r"^chrome-extension://[a-p]{32}$")
 VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{6,20}$")
-PLAYLIST_ID = re.compile(r"^(?:PL|UU|FL|RD|OLAK5uy_)[A-Za-z0-9_-]{10,60}|[A-Za-z0-9_-]{13,64}$")
+PLAYLIST_ID = re.compile(
+    r"^(?:(?:PL|UU|FL|RD|OLAK5uy_|TLGG)[A-Za-z0-9_-]{1,100}|[A-Za-z0-9_-]{10,64}|WL|LL|LM)$"
+)
 QUALITY_FORMATS = {
     "best": "bv*+ba/b",
     "2160": "bv*[height<=2160]+ba/b[height<=2160]",
@@ -119,6 +121,8 @@ def normalize_youtube_url(value: object, is_playlist: bool = False) -> str:
     if video_id:
         playlist_id = query.get("list", [""])[0]
         if is_playlist and playlist_id and PLAYLIST_ID.fullmatch(playlist_id):
+            if playlist_id.startswith("RD") or playlist_id in {"WL", "LL", "LM"}:
+                return f"https://www.youtube.com/watch?v={video_id}&list={playlist_id}"
             return f"https://www.youtube.com/playlist?list={playlist_id}"
         return f"https://www.youtube.com/watch?v={video_id}"
 
@@ -210,30 +214,49 @@ def is_partial_or_temp_file(path: Path | str) -> bool:
     return False
 
 
-def extract_playlist_items(yt_dlp: str, url: str) -> tuple[str, list[dict[str, str]]]:
+def extract_playlist_items(
+    yt_dlp: str, url: str, cookies_browser: Optional[str] = None
+) -> tuple[str, list[dict[str, str]]]:
     """Extract playlist title and individual video items without downloading."""
-    try:
-        cmd = [yt_dlp, "--flat-playlist", "-J", "--no-warnings", url]
-        out = subprocess.check_output(cmd, text=True, encoding="utf-8", timeout=35)
+    def _run_extract(use_cookies: bool) -> tuple[str, list[dict[str, str]]]:
+        cmd = [yt_dlp, "--flat-playlist", "--yes-playlist", "-J", "--no-warnings"]
+        if use_cookies and cookies_browser:
+            cmd.extend(["--cookies-from-browser", cookies_browser])
+        cmd.append(url)
+        out = subprocess.check_output(cmd, text=True, encoding="utf-8", timeout=45)
         data = json.loads(out)
         playlist_title = data.get("title") or "Playlist"
         entries: list[dict[str, str]] = []
-        for item in data.get("entries") or []:
-            if not item:
-                continue
-            vid_id = item.get("id") or ""
-            vid_title = item.get("title") or "YouTube video"
-            vid_url = item.get("url") or f"https://www.youtube.com/watch?v={vid_id}"
-            if not vid_url.startswith("http"):
-                vid_url = f"https://www.youtube.com/watch?v={vid_id}"
-            entries.append({
-                "id": vid_id,
-                "title": vid_title,
-                "url": vid_url,
-            })
+        raw_entries = data.get("entries")
+        if isinstance(raw_entries, list):
+            for item in raw_entries:
+                if not item or not isinstance(item, dict):
+                    continue
+                vid_id = str(item.get("id") or "").strip()
+                vid_title = str(item.get("title") or "YouTube video").strip()
+                vid_url = str(item.get("url") or "").strip()
+                if not vid_url and vid_id:
+                    vid_url = f"https://www.youtube.com/watch?v={vid_id}"
+                elif not vid_url.startswith("http") and vid_id:
+                    vid_url = f"https://www.youtube.com/watch?v={vid_id}"
+                if vid_url:
+                    entries.append({
+                        "id": vid_id,
+                        "title": vid_title,
+                        "url": vid_url,
+                    })
         return playlist_title, entries
+
+    try:
+        return _run_extract(use_cookies=bool(cookies_browser))
     except Exception as exc:
-        print(f"Playlist extraction fallback: {exc}", flush=True)
+        if cookies_browser:
+            try:
+                return _run_extract(use_cookies=False)
+            except Exception as inner_exc:
+                print(f"Playlist extraction fallback without cookies failed: {inner_exc}", flush=True)
+        else:
+            print(f"Playlist extraction fallback: {exc}", flush=True)
         return "Playlist", []
 
 
@@ -286,12 +309,29 @@ def validate_download_request(payload: object) -> dict[str, Any]:
     else:
         cookies_browser = None
 
+    raw_items = payload.get("items") or payload.get("entries") or []
+    items: list[dict[str, str]] = []
+    if isinstance(raw_items, list):
+        for it in raw_items[:500]:
+            if not isinstance(it, dict):
+                continue
+            v_url = str(it.get("url", "")).strip()
+            v_id = str(it.get("id", "")).strip() or extract_video_id(v_url)
+            v_title = str(it.get("title", "")).strip()[:300] or "YouTube video"
+            if v_id and VIDEO_ID.fullmatch(v_id):
+                items.append({
+                    "id": v_id,
+                    "title": v_title,
+                    "url": f"https://www.youtube.com/watch?v={v_id}",
+                })
+
     return {
         "url": url,
         "kind": kind,
         "quality": quality,
         "title": title,
         "is_playlist": is_playlist,
+        "items": items,
         "prefix_type": prefix_type,
         "custom_prefix": custom_prefix,
         "folder": folder,
@@ -572,7 +612,16 @@ class JobManager:
             self._cancel_idle_timer()
         url = request["url"]
         kind = request.get("kind", "video")
-        playlist_title, entries = extract_playlist_items(self.yt_dlp, url)
+        cookies_browser = request.get("cookies_browser") or self.cookies_from_browser
+
+        pre_extracted = request.get("items") or []
+        if pre_extracted and isinstance(pre_extracted, list):
+            req_title = str(request.get("title", "")).removeprefix("Playlist:").strip()
+            playlist_title = req_title or "Playlist"
+            entries = pre_extracted
+        else:
+            playlist_title, entries = extract_playlist_items(self.yt_dlp, url, cookies_browser=cookies_browser)
+
         if not entries:
             self._last_playlist_skipped = 0
             return [self.create(request)]

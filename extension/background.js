@@ -17,6 +17,7 @@ function isVideoUrl(rawUrl) {
 let trackerTimer = null;
 let lastKnownActiveJob = null;
 let shutdownTimer = null;
+const notifiedJobIds = new Set();
 
 function updateBadge(input) {
   try {
@@ -125,13 +126,20 @@ function broadcastToTabs(message) {
 }
 
 function notifyComplete(job) {
+  if (!job || !job.id || notifiedJobIds.has(job.id)) return;
+  notifiedJobIds.add(job.id);
+  if (notifiedJobIds.size > 200) {
+    const oldest = notifiedJobIds.values().next().value;
+    notifiedJobIds.delete(oldest);
+  }
+
   const filename = job.filename ? job.filename.split("/").pop() : "";
   const title = job.title || "YouTube video";
 
-  // 1. Native OS notification
+  // 1. Native OS notification with explicit ID to prevent duplicate notification cards
   try {
     if (chrome.notifications) {
-      chrome.notifications.create({
+      chrome.notifications.create(`okja-complete-${job.id}`, {
         type: "basic",
         iconUrl: chrome.runtime.getURL("icon128.png"),
         title: "Okja Saver - Download Complete! ✓",
@@ -163,15 +171,17 @@ function startTracking() {
 
       if (lastKnownActiveJob && (!active || active.id !== lastKnownActiveJob.id)) {
         // Active job changed or completed
+        const prevJob = lastKnownActiveJob;
+        lastKnownActiveJob = active;
         try {
-          const { job } = await OkjaApi.apiRequest(`/api/downloads/${lastKnownActiveJob.id}`);
+          const { job } = await OkjaApi.apiRequest(`/api/downloads/${prevJob.id}`);
           if (job && job.status === "complete") {
             notifyComplete(job);
           }
         } catch (_e) {}
+      } else {
+        lastKnownActiveJob = active;
       }
-
-      lastKnownActiveJob = active;
 
       const queueCount = Number(statusData?.queueCount ?? (Array.isArray(statusData?.queue) ? statusData.queue.length : 0));
       if (!active && queueCount === 0) {
@@ -222,6 +232,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           quality: message.quality || "best",
           title: message.title || "",
           isPlaylist: Boolean(message.isPlaylist),
+          items: Array.isArray(message.items) ? message.items : [],
           prefixType: message.prefixType || settings.prefixType || "number",
           customPrefix: message.customPrefix ?? settings.customPrefix ?? "",
           folder: message.folder ?? settings.downloadFolder ?? "",
@@ -242,6 +253,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           job: data.job,
           queued: data.queued,
           title: message.title || data.job?.title || "",
+          originTabId: _sender?.tab?.id ?? null,
         });
         sendResponse({ ok: true, ...data });
       } catch (err) {
@@ -391,10 +403,22 @@ if (chrome.action?.onClicked) {
   });
 }
 
-// React instantly to verification status changes in storage
+// React instantly to verification status and settings changes in storage
 chrome.storage?.onChanged?.addListener((changes, area) => {
-  if (area === "local" && ("onboardingCompleted" in changes)) {
-    syncActionPopup();
+  if (area === "local") {
+    if ("onboardingCompleted" in changes) {
+      syncActionPopup();
+    }
+    const settingsKeys = [
+      "defaultKind", "defaultQuality", "defaultAudioQuality",
+      "prefixType", "customPrefix", "downloadFolder", "channels",
+      "markWatched", "cookiesBrowser", "port",
+    ];
+    if (settingsKeys.some((k) => k in changes)) {
+      OkjaApi.getSettings().then((settings) => {
+        broadcastToTabs({ type: "settings-updated", settings });
+      }).catch(() => {});
+    }
   }
 });
 

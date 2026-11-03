@@ -27,7 +27,7 @@
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*", "https://m.youtube.com/*", "https://music.youtube.com/*"],
-      "js": ["share-menu.js"],
+      "js": ["shared.js", "share-menu.js"],
       "css": ["share-menu.css"],
       "run_at": "document_idle"
     }

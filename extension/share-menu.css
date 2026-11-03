@@ -542,6 +542,56 @@ html:not([dark]) .okja-playlist-item-download-btn:hover {
   color: currentColor !important;
 }
 
+/* Playlist Panel Action Bar Button (Loop / Shuffle bar in watch page playlist panel) */
+.okja-playlist-panel-action-wrapper {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  vertical-align: middle !important;
+  flex-shrink: 0 !important;
+  margin-left: 2px !important;
+  margin-right: 2px !important;
+  position: relative !important;
+  z-index: 5 !important;
+}
+
+.okja-playlist-panel-action-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: transparent !important;
+  border-radius: 50% !important;
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  max-width: 36px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  cursor: pointer !important;
+  border: none !important;
+  outline: none !important;
+  color: var(--yt-spec-text-primary, #ffffff) !important;
+  transition: background 0.15s ease, transform 0.1s ease !important;
+  box-sizing: border-box !important;
+  user-select: none !important;
+}
+
+.okja-playlist-panel-action-btn:hover {
+  background: var(--yt-spec-badge-chip-background, rgba(255, 255, 255, 0.15)) !important;
+}
+
+.okja-playlist-panel-action-btn:active {
+  transform: scale(0.92) !important;
+}
+
+html:not([dark]) .okja-playlist-panel-action-btn {
+  color: #0f0f0f !important;
+}
+
+html:not([dark]) .okja-playlist-panel-action-btn:hover {
+  background: rgba(0, 0, 0, 0.08) !important;
+}
+
 /* 7. Loading Spinner & Disabled State */
 @keyframes okjaSpin {
   0% { transform: rotate(0deg); }
@@ -557,6 +607,7 @@ html:not([dark]) .okja-playlist-item-download-btn:hover {
 button.okja-loading,
 .okja-yt-btn.okja-loading,
 .okja-playlist-btn.okja-loading,
+.okja-playlist-panel-action-btn.okja-loading,
 .okja-playlist-item-download-btn.okja-loading,
 .okja-music-bar-btn.okja-loading,
 .okja-music-item-download-btn.okja-loading,

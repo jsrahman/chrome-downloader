@@ -44,6 +44,18 @@ class YoutubeUrlTests(unittest.TestCase):
                     f"https://www.youtube.com/playlist?list={playlist_id}",
                 )
 
+        # Mixes and special lists preserve the watch URL with list param
+        mix_url = "https://www.youtube.com/watch?v=sOnqjkJTMaA&list=RDsOnqjkJTMaA"
+        self.assertEqual(
+            normalize_youtube_url(mix_url, is_playlist=True),
+            mix_url,
+        )
+        wl_url = "https://www.youtube.com/watch?v=sOnqjkJTMaA&list=WL"
+        self.assertEqual(
+            normalize_youtube_url(wl_url, is_playlist=True),
+            wl_url,
+        )
+
     def test_rejects_non_youtube_and_lookalike_hosts(self):
         bad_urls = [
             "https://example.com/watch?v=dQw4w9WgXcQ",
@@ -92,6 +104,22 @@ class RequestValidationTests(unittest.TestCase):
         res = validate_download_request(req)
         self.assertFalse(res["mark_watched"])
         self.assertEqual(res["cookies_browser"], "firefox")
+
+    def test_accepts_pre_extracted_items(self):
+        req = {
+            **self.valid,
+            "isPlaylist": True,
+            "items": [
+                {"id": "dQw4w9WgXcQ", "title": "Song 1", "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
+                {"id": "abcdefghijk", "title": "Song 2", "url": "https://www.youtube.com/watch?v=abcdefghijk"},
+                {"id": "invalid-video-id!!", "title": "Bad"},
+            ],
+        }
+        res = validate_download_request(req)
+        self.assertTrue(res["is_playlist"])
+        self.assertEqual(len(res["items"]), 2)
+        self.assertEqual(res["items"][0]["id"], "dQw4w9WgXcQ")
+        self.assertEqual(res["items"][1]["id"], "abcdefghijk")
 
         req_none = {
             **self.valid,
@@ -361,6 +389,30 @@ class PlaylistQueueTests(unittest.TestCase):
             self.assertEqual(summary["activeJob"]["id"], jobs[0].id)
             self.assertEqual(summary["queueCount"], 2)
             self.assertEqual(summary["queue"][0]["file_prefix"], "02 - ")
+
+    @patch("service.app.extract_playlist_items")
+    def test_playlist_uses_pre_extracted_items_directly(self, mock_extract):
+        manager = JobManager(Path("/tmp/okja-test"), "yt-dlp")
+        pre_items = [
+            {"id": "11111111111", "title": "First Song", "url": "https://www.youtube.com/watch?v=11111111111"},
+            {"id": "22222222222", "title": "Second Song", "url": "https://www.youtube.com/watch?v=22222222222"},
+        ]
+        with patch.object(manager, "_run"):
+            jobs = manager.create_playlist({
+                "url": "https://www.youtube.com/watch?v=11111111111&list=RD11111111111",
+                "kind": "video",
+                "quality": "1080",
+                "title": "Playlist: My Mix",
+                "items": pre_items,
+            })
+            # extract_playlist_items should NOT be called when pre-extracted items are provided
+            mock_extract.assert_not_called()
+            self.assertEqual(len(jobs), 2)
+            self.assertEqual(jobs[0].title, "First Song")
+            self.assertEqual(jobs[1].title, "Second Song")
+            self.assertEqual(jobs[0].subfolder, "My Mix")
+            self.assertEqual(manager._active_job_id, jobs[0].id)
+            self.assertEqual(manager._queue, [jobs[1].id])
 
 
 class CancelCleanupTests(unittest.TestCase):
