@@ -14,112 +14,243 @@
           <span></span>
         </div>
         <div>
-          <p class="eyebrow">LOCAL DOWNLOADER</p>
-          <h1>Okja Saver</h1>
+          <p id="headerEyebrow" class="eyebrow">LOCAL DOWNLOADER</p>
+          <h1 id="headerTitle">Okja Saver</h1>
         </div>
         <div style="margin-left: auto; display: flex; gap: 6px; align-items: center;">
+          <button id="btnBack" class="icon-button hidden" type="button" title="Back to downloads" aria-label="Back to downloads">←</button>
+          <button id="btnPopout" class="icon-button hidden" type="button" title="Open in separate window" aria-label="Open in separate window">↗</button>
           <button id="settings" class="icon-button" type="button" title="Preferences & Settings" aria-label="Open settings">⚙</button>
         </div>
       </header>
 
-      <!-- Active Download Panel (Shows in popup when a file is downloading) -->
-      <section id="progressPanel" class="progress-panel hidden" aria-live="polite">
-        <div class="status-row">
-          <div style="min-width: 0;">
-            <p class="label">CURRENTLY DOWNLOADING</p>
-            <p id="statusText" class="status-text">Preparing…</p>
+      <!-- Main View: Progress, Queue & Download Form -->
+      <div id="mainView">
+        <!-- Active Download Panel (Shows in popup when a file is downloading) -->
+        <section id="progressPanel" class="progress-panel hidden" aria-live="polite">
+          <div class="status-row">
+            <div style="min-width: 0;">
+              <p class="label">CURRENTLY DOWNLOADING</p>
+              <p id="statusText" class="status-text">Preparing…</p>
+            </div>
+            <span id="progressValue" class="progress-value">0%</span>
           </div>
-          <span id="progressValue" class="progress-value">0%</span>
-        </div>
-        <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
-        <p id="progressDetail" class="muted"></p>
-        <p id="errorText" class="error hidden"></p>
-        <button id="cancel" class="secondary-button" type="button" style="width: 100%;" title="Cancel current downloading video">Cancel download</button>
-      </section>
+          <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+          <p id="progressDetail" class="muted"></p>
+          <p id="errorText" class="error hidden"></p>
+          <button id="cancel" class="secondary-button" type="button" style="width: 100%;" title="Cancel current downloading video">Cancel download</button>
+        </section>
 
-      <!-- Queue Panel (Shows in popup when items are queued) -->
-      <section id="queuePanel" class="queue-panel hidden">
-        <div class="queue-header-row">
-          <p id="queueTitle" class="label">DOWNLOAD QUEUE</p>
-          <button id="btnClearQueue" class="queue-clear-all-btn" type="button" title="Clear all queued items">Clear Queue</button>
-        </div>
-        <div id="queueList" class="queue-list"></div>
-        <p class="muted" style="margin-top: 8px; font-size: 11px;">Queue items download automatically in sequence.</p>
-      </section>
-
-      <!-- Manual Download Section for Current Open Video -->
-      <section id="downloadForm">
-        <div class="video-card">
-          <div class="video-icon" aria-hidden="true">▶</div>
-          <div style="min-width: 0;">
-            <p class="label">CURRENT OPEN VIDEO</p>
-            <p id="videoTitle" class="video-title">Checking active tab…</p>
-            <p id="videoUrl" class="muted truncate"></p>
+        <!-- Queue Panel (Shows in popup when items are queued) -->
+        <section id="queuePanel" class="queue-panel hidden">
+          <div class="queue-header-row">
+            <p id="queueTitle" class="label">DOWNLOAD QUEUE</p>
+            <button id="btnClearQueue" class="queue-clear-all-btn" type="button" title="Clear all queued items">Clear Queue</button>
           </div>
-        </div>
+          <div id="queueList" class="queue-list"></div>
+          <p class="muted" style="margin-top: 8px; font-size: 11px;">Queue items download automatically in sequence.</p>
+        </section>
 
-        <fieldset class="format-fieldset">
-          <legend>Save as</legend>
-          <div class="segmented">
-            <label><input type="radio" name="kind" value="video" checked><span>Video</span></label>
-            <label><input type="radio" name="kind" value="audio"><span>MP3 audio</span></label>
+        <!-- Manual Download Section for Current Open Video -->
+        <section id="downloadForm">
+          <div class="video-card">
+            <div class="video-icon" aria-hidden="true">▶</div>
+            <div style="min-width: 0;">
+              <p class="label">CURRENT OPEN VIDEO</p>
+              <p id="videoTitle" class="video-title">Checking active tab…</p>
+              <p id="videoUrl" class="muted truncate"></p>
+            </div>
           </div>
-        </fieldset>
 
-        <!-- Video Resolution Selection (shown when Video is selected) -->
-        <label id="videoQualityRow" class="field-label" for="quality">
-          Video resolution
-          <select id="quality">
-            <option value="best">Best available (4K / 2K)</option>
-            <option value="2160">4K Ultra HD (2160p)</option>
-            <option value="1440">2K Quad HD (1440p)</option>
-            <option value="1080" selected>1080p Full HD</option>
-            <option value="720">720p HD</option>
-            <option value="480">480p SD</option>
-            <option value="360">360p Compact</option>
-          </select>
-        </label>
+          <fieldset class="format-fieldset">
+            <legend>Save as</legend>
+            <div class="segmented">
+              <label><input type="radio" name="kind" value="video" checked><span>Video</span></label>
+              <label><input type="radio" name="kind" value="audio"><span>MP3 audio</span></label>
+            </div>
+          </fieldset>
 
-        <!-- Audio Quality Selection (shown when MP3 audio is selected) -->
-        <label id="audioQualityRow" class="field-label hidden" for="audioQuality">
-          Audio quality (Bitrate)
-          <select id="audioQuality">
-            <option value="320" selected>320 kbps (Best Quality)</option>
-            <option value="256">256 kbps (High Quality)</option>
-            <option value="192">192 kbps (Standard Quality)</option>
-            <option value="128">128 kbps (Compact)</option>
-            <option value="best">Best Available (VBR)</option>
-          </select>
-        </label>
+          <!-- Video Resolution Selection (shown when Video is selected) -->
+          <label id="videoQualityRow" class="field-label" for="quality">
+            Video resolution
+            <select id="quality">
+              <option value="best">Best available (4K / 2K)</option>
+              <option value="2160">4K Ultra HD (2160p)</option>
+              <option value="1440">2K Quad HD (1440p)</option>
+              <option value="1080" selected>1080p Full HD</option>
+              <option value="720">720p HD</option>
+              <option value="480">480p SD</option>
+              <option value="360">360p Compact</option>
+            </select>
+          </label>
 
-        <!-- Filename Prefix Preference -->
-        <label class="field-label" for="prefixType" style="margin-top: 14px;">
-          Filename prefix
-          <select id="prefixType">
-            <option value="number">1. Number (01 - , 02 - , ...)</option>
-            <option value="roman">2. Roman number (I - , II - , ...)</option>
-            <option value="alphabet">3. Alphabet (A - , B - , ...)</option>
-            <option value="custom">4. Custom prefix</option>
-            <option value="none">None</option>
-          </select>
-        </label>
+          <!-- Audio Quality Selection (shown when MP3 audio is selected) -->
+          <label id="audioQualityRow" class="field-label hidden" for="audioQuality">
+            Audio quality (Bitrate)
+            <select id="audioQuality">
+              <option value="320" selected>320 kbps (Best Quality)</option>
+              <option value="256">256 kbps (High Quality)</option>
+              <option value="192">192 kbps (Standard Quality)</option>
+              <option value="128">128 kbps (Compact)</option>
+              <option value="best">Best Available (VBR)</option>
+            </select>
+          </label>
 
-        <!-- Custom Prefix Input -->
-        <label id="customPrefixRow" class="field-label hidden" for="customPrefix" style="margin-top: 10px;">
-          Custom prefix pattern
-          <input id="customPrefix" type="text" placeholder="e.g. Part {index} - or Ep {num} -">
-        </label>
+          <!-- Filename Prefix Preference -->
+          <label class="field-label" for="prefixType" style="margin-top: 14px;">
+            Filename prefix
+            <select id="prefixType">
+              <option value="number">1. Number (01 - , 02 - , ...)</option>
+              <option value="roman">2. Roman number (I - , II - , ...)</option>
+              <option value="alphabet">3. Alphabet (A - , B - , ...)</option>
+              <option value="custom">4. Custom prefix</option>
+              <option value="none">None</option>
+            </select>
+          </label>
 
-        <!-- Download Folder Input -->
-        <label class="field-label" for="downloadFolder" style="margin-top: 14px;">
-          Download folder (optional)
-          <input id="downloadFolder" type="text" placeholder="Default: downloads root (or playlist folder)">
-        </label>
+          <!-- Custom Prefix Input -->
+          <label id="customPrefixRow" class="field-label hidden" for="customPrefix" style="margin-top: 10px;">
+            Custom prefix pattern
+            <input id="customPrefix" type="text" placeholder="e.g. Part {index} - or Ep {num} -">
+          </label>
 
-        <button id="download" class="primary-button" type="button" style="margin-top: 18px;" disabled>Start download</button>
-      </section>
+          <!-- Download Folder Input -->
+          <label class="field-label" for="downloadFolder" style="margin-top: 14px;">
+            Download folder (optional)
+            <input id="downloadFolder" type="text" placeholder="Default: downloads root (or playlist folder)">
+          </label>
 
-      <p id="message" class="message hidden" role="alert"></p>
+          <button id="download" class="primary-button" type="button" style="margin-top: 18px;" disabled>Start download</button>
+        </section>
+
+        <p id="message" class="message hidden" role="alert"></p>
+      </div>
+
+      <!-- In-Popup Settings View -->
+      <div id="settingsView" class="hidden">
+        <form id="popupSettingsForm">
+          <!-- Default Format Preference -->
+          <fieldset class="format-fieldset" style="margin-top: 4px;">
+            <legend>Default download format</legend>
+            <div class="segmented">
+              <label><input type="radio" name="popupDefaultKind" value="video" checked><span>Video (MP4)</span></label>
+              <label><input type="radio" name="popupDefaultKind" value="audio"><span>Audio (MP3)</span></label>
+            </div>
+            <span class="muted" style="display: block; margin-top: 6px; font-size: 11px;">
+              1-click download buttons on YouTube will use this format.
+            </span>
+          </fieldset>
+
+          <!-- Default Video Resolution Preference -->
+          <label id="popupVideoQualityRow" class="field-label" for="popupDefaultQuality" style="margin-top: 12px;">
+            Default video resolution
+            <select id="popupDefaultQuality">
+              <option value="best">Best available (4K / 2K)</option>
+              <option value="2160">4K Ultra HD (2160p)</option>
+              <option value="1440">2K Quad HD (1440p)</option>
+              <option value="1080" selected>1080p Full HD</option>
+              <option value="720">720p HD</option>
+              <option value="480">480p SD</option>
+              <option value="360">360p Compact</option>
+            </select>
+          </label>
+
+          <!-- Default Audio Quality Preference -->
+          <label id="popupAudioQualityRow" class="field-label hidden" for="popupDefaultAudioQuality" style="margin-top: 12px;">
+            Default audio quality (Bitrate)
+            <select id="popupDefaultAudioQuality">
+              <option value="320" selected>320 kbps (Best Quality MP3)</option>
+              <option value="256">256 kbps (High Quality)</option>
+              <option value="192">192 kbps (Standard)</option>
+              <option value="128">128 kbps (Compact)</option>
+              <option value="best">Best Available (VBR)</option>
+            </select>
+          </label>
+
+          <!-- Filename Prefix Preference -->
+          <label class="field-label" for="popupPrefixType" style="margin-top: 14px;">
+            Filename prefix (Playlists & Series)
+            <select id="popupPrefixType">
+              <option value="number">1. Number (01 - , 02 - , ...)</option>
+              <option value="roman">2. Roman number (I - , II - , ...)</option>
+              <option value="alphabet">3. Alphabet (A - , B - , ...)</option>
+              <option value="custom">4. Custom prefix pattern</option>
+              <option value="none">None (No prefix)</option>
+            </select>
+          </label>
+
+          <!-- Custom Prefix Input -->
+          <label id="popupCustomPrefixRow" class="field-label hidden" for="popupCustomPrefix" style="margin-top: 8px;">
+            Custom prefix pattern
+            <input id="popupCustomPrefix" type="text" placeholder="e.g. Part {index} - or Video_{num}_">
+            <span class="muted" style="display: block; margin-top: 4px;">Use {index} for 1, 2... or {num} for 01, 02...</span>
+          </label>
+
+          <!-- Download Folder Preference -->
+          <label class="field-label" for="popupDownloadFolder" style="margin-top: 14px;">
+            Download folder (optional)
+            <input id="popupDownloadFolder" type="text" placeholder="e.g. Courses or Music Videos">
+            <span class="muted" style="display: block; margin-top: 4px;">Playlists automatically save inside their own folder if left blank.</span>
+          </label>
+
+          <!-- Multi-channel Acceleration -->
+          <label class="field-label" for="popupChannels" style="margin-top: 14px;">
+            Download acceleration (Multi-channel)
+            <select id="popupChannels">
+              <option value="16">16 Channels (Maximum speed)</option>
+              <option value="8" selected>8 Channels (Fast — Recommended)</option>
+              <option value="4">4 Channels (Balanced)</option>
+              <option value="1">1 Channel (Standard)</option>
+            </select>
+          </label>
+
+          <!-- Watch history & YouTube Activity Sync -->
+          <fieldset class="format-fieldset" style="margin-top: 14px;">
+            <legend>YouTube watch history & visit sync</legend>
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 500;">
+              <input id="popupMarkWatched" type="checkbox" checked style="accent-color: var(--accent); width: 16px; height: 16px;">
+              <span>Mark downloaded videos as watched on YouTube</span>
+            </label>
+            <span class="muted" style="display: block; margin-top: 4px; font-size: 11px;">
+              Sends playback confirmation so downloads register view counts and appear in your watch history.
+            </span>
+
+            <label class="field-label" for="popupCookiesBrowser" style="margin-top: 10px;">
+              Browser for YouTube session cookies
+              <select id="popupCookiesBrowser">
+                <option value="chrome" selected>Google Chrome</option>
+                <option value="brave">Brave</option>
+                <option value="edge">Microsoft Edge</option>
+                <option value="firefox">Mozilla Firefox</option>
+                <option value="safari">Apple Safari</option>
+                <option value="none">None (Anonymous)</option>
+              </select>
+            </label>
+          </fieldset>
+
+          <!-- Service Port -->
+          <label class="field-label" for="popupPort" style="margin-top: 14px;">
+            Local service port
+            <input id="popupPort" type="number" min="1024" max="65535" required value="43117">
+          </label>
+
+          <div class="button-row" style="margin-top: 16px;">
+            <button class="primary-button" type="submit">Save preferences</button>
+            <button id="popupTestBtn" class="secondary-button" type="button">Test</button>
+          </div>
+
+          <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 10px;">
+            <button id="popupClearCacheBtn" class="secondary-button" type="button" style="width: 100%;">
+              🧹 Clear Download Cache
+            </button>
+            <button id="popupSetupBtn" class="secondary-button" type="button" style="width: 100%;">
+              🛠️ Run Setup Wizard
+            </button>
+          </div>
+        </form>
+
+        <p id="popupSettingsResult" class="connection-result" style="margin-top: 12px;" aria-live="polite"></p>
+      </div>
     </main>
     <script src="shared.js"></script>
     <script src="popup.js"></script>

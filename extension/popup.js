@@ -1,4 +1,10 @@
 const elements = {
+  headerEyebrow: document.querySelector("#headerEyebrow"),
+  headerTitle: document.querySelector("#headerTitle"),
+  btnBack: document.querySelector("#btnBack"),
+  btnPopout: document.querySelector("#btnPopout"),
+  mainView: document.querySelector("#mainView"),
+  settingsView: document.querySelector("#settingsView"),
   downloadForm: document.querySelector("#downloadForm"),
   videoTitle: document.querySelector("#videoTitle"),
   videoUrl: document.querySelector("#videoUrl"),
@@ -24,6 +30,24 @@ const elements = {
   customPrefixRow: document.querySelector("#customPrefixRow"),
   customPrefix: document.querySelector("#customPrefix"),
   downloadFolder: document.querySelector("#downloadFolder"),
+
+  popupSettingsForm: document.querySelector("#popupSettingsForm"),
+  popupVideoQualityRow: document.querySelector("#popupVideoQualityRow"),
+  popupDefaultQuality: document.querySelector("#popupDefaultQuality"),
+  popupAudioQualityRow: document.querySelector("#popupAudioQualityRow"),
+  popupDefaultAudioQuality: document.querySelector("#popupDefaultAudioQuality"),
+  popupPrefixType: document.querySelector("#popupPrefixType"),
+  popupCustomPrefixRow: document.querySelector("#popupCustomPrefixRow"),
+  popupCustomPrefix: document.querySelector("#popupCustomPrefix"),
+  popupDownloadFolder: document.querySelector("#popupDownloadFolder"),
+  popupChannels: document.querySelector("#popupChannels"),
+  popupMarkWatched: document.querySelector("#popupMarkWatched"),
+  popupCookiesBrowser: document.querySelector("#popupCookiesBrowser"),
+  popupPort: document.querySelector("#popupPort"),
+  popupTestBtn: document.querySelector("#popupTestBtn"),
+  popupClearCacheBtn: document.querySelector("#popupClearCacheBtn"),
+  popupSetupBtn: document.querySelector("#popupSetupBtn"),
+  popupSettingsResult: document.querySelector("#popupSettingsResult"),
 };
 
 let currentUrl = "";
@@ -88,8 +112,115 @@ function showMessage(text, isSuccess = false) {
   elements.message.className = `message ${isSuccess ? "success" : ""} ${text ? "" : "hidden"}`;
 }
 
+function setPopupSettingsResult(text, isError = false) {
+  if (!elements.popupSettingsResult) return;
+  elements.popupSettingsResult.textContent = text;
+  elements.popupSettingsResult.style.color = isError ? "var(--error)" : "var(--accent)";
+}
+
+function updatePopupSettingsQualityVisibility() {
+  const isAudio = document.querySelector('input[name="popupDefaultKind"]:checked')?.value === "audio";
+  if (elements.popupVideoQualityRow) {
+    elements.popupVideoQualityRow.classList.toggle("hidden", isAudio);
+  }
+  if (elements.popupAudioQualityRow) {
+    elements.popupAudioQualityRow.classList.toggle("hidden", !isAudio);
+  }
+}
+
+function updatePopupSettingsCustomPrefixVisibility() {
+  if (elements.popupCustomPrefixRow && elements.popupPrefixType) {
+    elements.popupCustomPrefixRow.classList.toggle("hidden", elements.popupPrefixType.value !== "custom");
+  }
+}
+
+async function loadPopupSettings() {
+  setPopupSettingsResult("");
+  const s = await OkjaApi.getSettings();
+  if (elements.popupPort) elements.popupPort.value = s.port || 43117;
+  if (elements.popupDefaultQuality) elements.popupDefaultQuality.value = s.defaultQuality || "1080";
+  if (elements.popupDefaultAudioQuality) elements.popupDefaultAudioQuality.value = s.defaultAudioQuality || "320";
+  if (elements.popupPrefixType) elements.popupPrefixType.value = s.prefixType || "number";
+  if (elements.popupCustomPrefix) elements.popupCustomPrefix.value = s.customPrefix || "";
+  if (elements.popupDownloadFolder) elements.popupDownloadFolder.value = s.downloadFolder || "";
+  if (elements.popupChannels) elements.popupChannels.value = String(s.channels || 8);
+  if (elements.popupMarkWatched) elements.popupMarkWatched.checked = s.markWatched !== false;
+  if (elements.popupCookiesBrowser) elements.popupCookiesBrowser.value = s.cookiesBrowser || "chrome";
+  const kindInput = document.querySelector(`input[name="popupDefaultKind"][value="${s.defaultKind || "video"}"]`);
+  if (kindInput) kindInput.checked = true;
+  updatePopupSettingsQualityVisibility();
+  updatePopupSettingsCustomPrefixVisibility();
+}
+
+async function savePopupSettings() {
+  const port = Number(elements.popupPort?.value);
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+    throw new Error("Enter a valid port number (1024-65535).");
+  }
+
+  const kindRadio = document.querySelector('input[name="popupDefaultKind"]:checked');
+  const defaultKind = kindRadio ? kindRadio.value : "video";
+  const defaultQuality = elements.popupDefaultQuality ? elements.popupDefaultQuality.value || "1080" : "1080";
+  const defaultAudioQuality = elements.popupDefaultAudioQuality ? elements.popupDefaultAudioQuality.value || "320" : "320";
+  const prefixType = elements.popupPrefixType ? elements.popupPrefixType.value : "number";
+  const customPrefix = elements.popupCustomPrefix ? elements.popupCustomPrefix.value.trim() : "";
+  const downloadFolder = elements.popupDownloadFolder ? elements.popupDownloadFolder.value.trim() : "";
+  const channels = elements.popupChannels ? Number(elements.popupChannels.value) || 8 : 8;
+  const markWatched = elements.popupMarkWatched ? elements.popupMarkWatched.checked : true;
+  const cookiesBrowser = elements.popupCookiesBrowser ? elements.popupCookiesBrowser.value || "chrome" : "chrome";
+
+  await chrome.storage.local.set({
+    port,
+    defaultKind,
+    defaultQuality,
+    defaultAudioQuality,
+    prefixType,
+    customPrefix,
+    downloadFolder,
+    channels,
+    markWatched,
+    cookiesBrowser,
+  });
+}
+
+async function syncMainViewFromSettings() {
+  const s = await OkjaApi.getSettings();
+  if (elements.quality) elements.quality.value = s.defaultQuality || "1080";
+  if (elements.audioQuality) elements.audioQuality.value = s.defaultAudioQuality || "320";
+  const kindInput = document.querySelector(`input[name="kind"][value="${s.defaultKind || "video"}"]`);
+  if (kindInput) kindInput.checked = true;
+  updateFormatQualityVisibility();
+
+  if (elements.prefixType) elements.prefixType.value = s.prefixType || "number";
+  if (elements.customPrefix) elements.customPrefix.value = s.customPrefix || "";
+  if (elements.downloadFolder) elements.downloadFolder.value = s.downloadFolder || "";
+  updateCustomPrefixVisibility();
+}
+
+function showSettingsView() {
+  if (elements.mainView) elements.mainView.classList.add("hidden");
+  if (elements.settingsView) elements.settingsView.classList.remove("hidden");
+  if (elements.settings) elements.settings.classList.add("hidden");
+  if (elements.btnBack) elements.btnBack.classList.remove("hidden");
+  if (elements.btnPopout) elements.btnPopout.classList.remove("hidden");
+  if (elements.headerEyebrow) elements.headerEyebrow.textContent = "OKJA SAVER";
+  if (elements.headerTitle) elements.headerTitle.textContent = "Settings";
+  loadPopupSettings();
+}
+
+function showMainView() {
+  if (elements.settingsView) elements.settingsView.classList.add("hidden");
+  if (elements.mainView) elements.mainView.classList.remove("hidden");
+  if (elements.settings) elements.settings.classList.remove("hidden");
+  if (elements.btnBack) elements.btnBack.classList.add("hidden");
+  if (elements.btnPopout) elements.btnPopout.classList.add("hidden");
+  if (elements.headerEyebrow) elements.headerEyebrow.textContent = "LOCAL DOWNLOADER";
+  if (elements.headerTitle) elements.headerTitle.textContent = "Okja Saver";
+  syncMainViewFromSettings();
+}
+
 function openOptions() {
-  chrome.runtime.openOptionsPage();
+  showSettingsView();
 }
 
 function selectedKind() {
@@ -329,10 +460,68 @@ async function initialize() {
   startPolling();
 }
 
-elements.settings.addEventListener("click", openOptions);
+elements.settings.addEventListener("click", showSettingsView);
+elements.btnBack?.addEventListener("click", showMainView);
+elements.btnPopout?.addEventListener("click", () => {
+  chrome.windows.create({
+    url: chrome.runtime.getURL("options.html"),
+    type: "popup",
+    width: 520,
+    height: 700,
+  });
+});
 elements.download.addEventListener("click", startDownload);
 elements.cancel.addEventListener("click", cancelActiveDownload);
 elements.btnClearQueue?.addEventListener("click", handleClearQueue);
+
+elements.popupSettingsForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await savePopupSettings();
+    setPopupSettingsResult("Preferences saved successfully.");
+  } catch (err) {
+    setPopupSettingsResult(err.message, true);
+  }
+});
+
+elements.popupTestBtn?.addEventListener("click", async () => {
+  try {
+    await savePopupSettings();
+    setPopupSettingsResult("Connecting to local service…");
+    const health = await OkjaApi.apiRequest("/api/health");
+    if (!health.ytDlpAvailable) {
+      throw new Error("Connected, but yt-dlp is not available.");
+    }
+    setPopupSettingsResult(`Connected! Download dir: ${health.downloadDir}`);
+  } catch (err) {
+    setPopupSettingsResult(err.message, true);
+  }
+});
+
+elements.popupClearCacheBtn?.addEventListener("click", () => {
+  if (elements.popupClearCacheBtn) elements.popupClearCacheBtn.disabled = true;
+  setPopupSettingsResult("Clearing download cache…");
+  chrome.runtime.sendMessage({ type: "clear-cache" }, (res) => {
+    if (elements.popupClearCacheBtn) elements.popupClearCacheBtn.disabled = false;
+    if (res?.ok) {
+      setPopupSettingsResult("Download cache cleared! Previously downloaded videos can now be re-downloaded.");
+    } else {
+      setPopupSettingsResult(res?.error || "Failed to clear cache.", true);
+    }
+  });
+});
+
+elements.popupSetupBtn?.addEventListener("click", () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") });
+});
+
+document.querySelectorAll('input[name="popupDefaultKind"]').forEach((input) => {
+  input.addEventListener("change", updatePopupSettingsQualityVisibility);
+});
+
+if (elements.popupPrefixType) {
+  elements.popupPrefixType.addEventListener("change", updatePopupSettingsCustomPrefixVisibility);
+}
 
 document.querySelectorAll('input[name="kind"]').forEach((input) => {
   input.addEventListener("change", updateFormatQualityVisibility);
